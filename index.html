@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Parqueadero App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @media print {
+        body * { visibility: hidden; }
+        #ticket-print-area, #ticket-print-area * { visibility: visible; }
+        #ticket-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
