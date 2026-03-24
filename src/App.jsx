@@ -12,6 +12,9 @@ import UsuariosAdmin from './components/UsuariosAdmin';
 import ParkingAdmin from './components/ParkingAdmin';
 import HomeStats from './components/HomeStats';
 import CajaCierre from './components/CajaCierre';
+import Reportes from './components/Reportes';
+import MensualidadesAdmin from './components/MensualidadesAdmin';
+import AdminPanel from './components/AdminPanel';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -28,6 +31,11 @@ function AppRoutes() {
     <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/admin-panel" element={
+            <PrivateRoute>
+                <AdminPanel />
+            </PrivateRoute>
+        } />
         
         <Route path="/dashboard" element={
           <PrivateRoute>
@@ -39,6 +47,8 @@ function AppRoutes() {
           <Route path="salida" element={<TicketExit />} />
           <Route path="tarifas" element={<TarifasAdmin />} />
           <Route path="caja" element={<CajaCierre />} />
+          <Route path="reportes" element={<Reportes />} />
+          <Route path="mensualidades" element={<MensualidadesAdmin />} />
           <Route path="usuarios" element={<UsuariosAdmin />} />
           <Route path="admin-parking" element={<ParkingAdmin />} />
         </Route>

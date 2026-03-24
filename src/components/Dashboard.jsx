@@ -56,6 +56,12 @@ export default function Dashboard() {
                 <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">
                 {user?.username} ({user?.role})
                 </p>
+                {/* Switch Parking Link */}
+                {(user?.role === 'SUPER_ADMIN' || (user?.managedParkings && user?.managedParkings.length > 0)) && (
+                    <Link to="/admin-panel" className="block text-xs text-blue-300 hover:text-white mt-2 underline">
+                        &larr; Cambiar Parqueadero
+                    </Link>
+                )}
             </div>
             {/* Close button for mobile */}
             <button 
@@ -138,6 +144,24 @@ export default function Dashboard() {
                     <span className="font-medium">Tarifas</span>
                   </Link>
               )}
+
+              <Link 
+                to="/dashboard/reportes" 
+                onClick={() => setSidebarOpen(false)}
+                className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ${isActive('/dashboard/reportes')}`}
+              >
+                <span className="text-xl">📈</span>
+                <span className="font-medium">Reportes</span>
+              </Link>
+
+              <Link 
+                to="/dashboard/mensualidades" 
+                onClick={() => setSidebarOpen(false)}
+                className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ${isActive('/dashboard/mensualidades')}`}
+              >
+                <span className="text-xl">📅</span>
+                <span className="font-medium">Mensualidades</span>
+              </Link>
 
               <Link 
                 to="/dashboard/usuarios" 

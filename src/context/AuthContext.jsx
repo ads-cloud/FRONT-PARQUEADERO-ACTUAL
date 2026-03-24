@@ -46,6 +46,24 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const switchParking = async (targetParkingId) => {
+      try {
+          const res = await axios.post('/api/auth/switch-parking', { targetParkingId });
+          const { access_token } = res.data;
+          
+          localStorage.setItem('token', access_token);
+          axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+          
+          const profileRes = await axios.get('/api/auth/profile');
+          setUser(profileRes.data);
+          setToken(access_token);
+          return true;
+      } catch (error) {
+          console.error("Switch failed", error);
+          return false;
+      }
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
@@ -58,6 +76,7 @@ export const AuthProvider = ({ children }) => {
     token,
     login,
     logout,
+    switchParking,
     loading,
     isAuth: !!user
   };

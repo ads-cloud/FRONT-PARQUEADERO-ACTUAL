@@ -57,26 +57,34 @@ export default function HomeStats() {
 
   return (
     <div className="space-y-6">
-       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Card Ingresos */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-              <div className="flex items-start justify-between w-full">
-                  <div>
-                      <p className="text-sm font-medium text-gray-500 mb-1">Ingresos de Hoy</p>
-                      <h3 className="text-3xl font-bold text-gray-800">
-                        ${stats.income.total.toLocaleString('es-CO')}
-                      </h3>
-                  </div>
-                  <div className="p-3 bg-green-100 rounded-full text-green-600">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                  </div>
-              </div>
-              {renderBreakdown(stats.income.byType, true)}
-          </div>
+       <div className={`grid grid-cols-1 md:grid-cols-2 ${stats.income.expiringCount > 0 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
+          
+          {/* 1. Card Mensualidades Vencimiento (Si existe) */}
+          {(stats.income.expiringCount > 0) && (
+            <div className="bg-red-50 p-6 rounded-xl shadow-sm border border-red-100 flex flex-col justify-between">
+                <div className="flex items-start justify-between w-full">
+                    <div>
+                        <p className="text-sm font-bold text-red-600 mb-1 uppercase tracking-wider">⚠️ Atención Requerida</p>
+                        <h3 className="text-3xl font-bold text-red-900">
+                            {stats.income.expiringCount}
+                        </h3>
+                        <p className="text-sm text-red-700 mt-1">Mensualidades vencidas o por vencer</p>
+                    </div>
+                    <div className="p-3 bg-red-100 rounded-full text-red-600 animate-pulse">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                    </div>
+                </div>
+                 <div className="mt-auto pt-4">
+                     <a href="/dashboard/mensualidades" className="text-xs font-bold text-red-800 hover:text-red-950 underline flex items-center gap-1">
+                        Gestionar Mensualidades &rarr;
+                     </a>
+                </div>
+            </div>
+          )}
 
-          {/* Card Ocupación */}
+          {/* 2. Card Ocupación */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
               <div className="flex items-start justify-center gap-6 w-full">
                   <div className="flex-1">
@@ -96,6 +104,24 @@ export default function HomeStats() {
                   </div>
               </div>
               {renderBreakdown(stats.occupancy.byType)}
+          </div>
+
+          {/* 3. Card Ingresos */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+              <div className="flex items-start justify-between w-full">
+                  <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Ingresos de Hoy</p>
+                      <h3 className="text-3xl font-bold text-gray-800">
+                        ${stats.income.total.toLocaleString('es-CO')}
+                      </h3>
+                  </div>
+                  <div className="p-3 bg-green-100 rounded-full text-green-600">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                  </div>
+              </div>
+              {renderBreakdown(stats.income.byType, true)}
           </div>
        </div>
 
