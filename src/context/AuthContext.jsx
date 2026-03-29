@@ -27,6 +27,12 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
+  const refreshProfile = async () => {
+    const res = await axios.get('/api/auth/profile');
+    setUser(res.data);
+    return res.data;
+  };
+
   const login = async (username, password) => {
     try {
         const res = await axios.post('/api/auth/login', { username, password });
@@ -39,10 +45,13 @@ export const AuthProvider = ({ children }) => {
         const profileRes = await axios.get('/api/auth/profile');
         setUser(profileRes.data);
         setToken(access_token);
-        return true;
+        return {
+          success: true,
+          mustChangePassword: !!profileRes.data?.mustChangePassword,
+        };
     } catch (e) {
         console.error(e);
-        return false;
+        return { success: false, mustChangePassword: false };
     }
   };
 
@@ -71,12 +80,24 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
   };
 
+  const changePassword = async (currentPassword, newPassword) => {
+    const res = await axios.post('/api/auth/change-password', { currentPassword, newPassword });
+    const { access_token } = res.data;
+    localStorage.setItem('token', access_token);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+    setToken(access_token);
+    await refreshProfile();
+    return true;
+  };
+
   const value = {
     user,
     token,
     login,
     logout,
     switchParking,
+    changePassword,
+    refreshProfile,
     loading,
     isAuth: !!user
   };

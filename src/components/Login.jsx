@@ -15,9 +15,14 @@ export default function Login() {
     setLoading(true);
     // Simular un pequeño delay para mejor UX
     setTimeout(async () => {
-      const success = await login(user, pass);
+      const result = await login(user, pass);
       setLoading(false);
-      if (success) {
+      if (result.success) {
+        if (result.mustChangePassword) {
+          toast('Debes cambiar tu contraseña antes de continuar', { icon: '🔐' });
+          navigate('/change-password');
+          return;
+        }
         toast.success('¡Bienvenido de nuevo!');
         navigate('/dashboard');
       } else {

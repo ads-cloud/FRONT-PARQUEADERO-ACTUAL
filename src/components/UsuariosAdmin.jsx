@@ -16,6 +16,12 @@ const TrashIconElement = ({ className }) => (
     </svg>
 );
 
+const KeyIconElement = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 1 1 1.526 2.622l-4.297 4.297a1.125 1.125 0 0 1-.797.33H9.75v2.25H7.5V17h-2.25v2.25H3v-3.439c0-.298.119-.584.33-.796l6.796-6.797a3 3 0 0 1 5.624-2.968Z" />
+  </svg>
+);
+
 function UsuariosAdmin() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
@@ -111,6 +117,22 @@ function UsuariosAdmin() {
       fetchUsers();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error al eliminar');
+    }
+  };
+
+  const handleResetPassword = async (targetUser) => {
+    const newPassword = window.prompt(`Nueva contraseña temporal para ${targetUser.username}:`);
+    if (!newPassword) return;
+    if (newPassword.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
+    try {
+      await axios.post(`/api/users/${targetUser.id}/reset-password`, { newPassword });
+      toast.success('Contraseña restablecida. Se solicitará cambio al próximo ingreso.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'No fue posible restablecer contraseña');
     }
   };
 
@@ -238,6 +260,15 @@ function UsuariosAdmin() {
                     {u.parking ? u.parking.nombre : <span className="text-gray-400 italic">N/A</span>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  {(user.id !== u.id && (isSuperAdmin || (u.role !== 'ADMIN' && u.role !== 'SUPER_ADMIN'))) ? (
+                    <button
+                      onClick={() => handleResetPassword(u)}
+                      className="text-amber-700 hover:text-amber-900 bg-amber-50 p-2 rounded-full hover:bg-amber-100 transition-colors mr-2"
+                      title="Resetear contraseña"
+                    >
+                      <KeyIconElement className="w-5 h-5" />
+                    </button>
+                  ) : null}
                   {/* Prevent deleting yourself or Super Admin if not allowed */}
                   {(user.id !== u.id && u.role !== 'SUPER_ADMIN') || (user.id !== u.id && isSuperAdmin) ? (
                       <button 

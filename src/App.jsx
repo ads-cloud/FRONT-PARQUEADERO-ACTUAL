@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast'; 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/Login';
@@ -15,12 +15,18 @@ import CajaCierre from './components/CajaCierre';
 import Reportes from './components/Reportes';
 import MensualidadesAdmin from './components/MensualidadesAdmin';
 import AdminPanel from './components/AdminPanel';
+import ChangePassword from './components/ChangePassword';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   
   if (loading) {
     return <div className="flex h-screen items-center justify-center text-gray-500">Cargando sistema...</div>;
+  }
+
+  if (user?.mustChangePassword && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />;
   }
   
   return user ? children : <Navigate to="/login" replace />;
@@ -31,6 +37,11 @@ function AppRoutes() {
     <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/change-password" element={
+          <PrivateRoute>
+            <ChangePassword />
+          </PrivateRoute>
+        } />
         <Route path="/admin-panel" element={
             <PrivateRoute>
                 <AdminPanel />
