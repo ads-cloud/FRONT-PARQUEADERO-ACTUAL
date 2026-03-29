@@ -23,18 +23,20 @@ export default function TicketEntry() {
   // Dynamic types state
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
+  const [parking, setParking] = useState(null);
 
   const printRef = useRef();
 
-  // 1. Cargar tipos disponibles
+  // 1. Cargar tipos disponibles y datos del parqueadero
   useEffect(() => {
     const fetchTypes = async () => {
       try {
-        // Change to /api/parking/tarifas to get dynamic types for THIS parking
-        const res = await axios.get('/api/parking/tarifas');
-        // Tarifas returns array of objects like { id, tipoVehiculo, ... }
-        // We might want to list unique types or just use them directly
-        setVehicleTypes(res.data);
+        const [tarifasRes, parkingRes] = await Promise.all([
+          axios.get('/api/parking/tarifas'),
+          axios.get('/api/parking/me'),
+        ]);
+        setVehicleTypes(tarifasRes.data);
+        setParking(parkingRes.data);
         setLoadingTypes(false);
       } catch (error) {
         console.error(error);
@@ -185,7 +187,7 @@ export default function TicketEntry() {
       </div>
       
       {/* Ticket oculto para impresión */}
-      <div className="hidden"><TicketPrint ref={printRef} ticket={lastTicket} /></div>
+      <div className="hidden"><TicketPrint ref={printRef} ticket={lastTicket} parking={parking} /></div>
     </div>
   );
 }

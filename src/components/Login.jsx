@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 export default function Login() {
-  const [user, setUserInput] = useState('admin');
-  const [pass, setPassInput] = useState('admin');
+  const [user, setUserInput] = useState('');
+  const [pass, setPassInput] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();

@@ -25,7 +25,7 @@ export default function ParkingAdmin() {
   const [parkings, setParkings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ id: null, nombre: '', direccion: '' });
+  const [formData, setFormData] = useState({ id: null, nombre: '', direccion: '', nit: '', telefono: '', horario: '', observacion: '' });
 
   useEffect(() => {
     fetchParkings();
@@ -55,12 +55,20 @@ export default function ParkingAdmin() {
   };
 
   const handleEdit = (parking) => {
-    setFormData({ id: parking.id, nombre: parking.nombre, direccion: parking.direccion });
+    setFormData({
+      id: parking.id,
+      nombre: parking.nombre,
+      direccion: parking.direccion,
+      nit: parking.nit ?? '',
+      telefono: parking.telefono ?? '',
+      horario: parking.horario ?? '',
+      observacion: parking.observacion ?? '',
+    });
     setIsModalOpen(true);
   };
 
   const handleCreate = () => {
-    setFormData({ id: null, nombre: '', direccion: '' });
+    setFormData({ id: null, nombre: '', direccion: '', nit: '', telefono: '', horario: '', observacion: '' });
     setIsModalOpen(true);
   };
 
@@ -70,13 +78,21 @@ export default function ParkingAdmin() {
       if (formData.id) {
         await axios.put(`/api/parking/${formData.id}`, {
           nombre: formData.nombre,
-          direccion: formData.direccion
+          direccion: formData.direccion,
+          nit: formData.nit,
+          telefono: formData.telefono,
+          horario: formData.horario,
+          observacion: formData.observacion,
         });
         toast.success('Parqueadero actualizado');
       } else {
         await axios.post('/api/parking', {
           nombre: formData.nombre,
-          direccion: formData.direccion
+          direccion: formData.direccion,
+          nit: formData.nit,
+          telefono: formData.telefono,
+          horario: formData.horario,
+          observacion: formData.observacion,
         });
         toast.success('Parqueadero creado');
       }
@@ -109,6 +125,8 @@ export default function ParkingAdmin() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NIT</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teléfono</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dirección</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
               </tr>
@@ -118,6 +136,8 @@ export default function ParkingAdmin() {
                 <tr key={parking.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">#{parking.id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{parking.nombre}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{parking.nit ?? '-'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{parking.telefono ?? '-'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{parking.direccion}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button 
@@ -137,7 +157,7 @@ export default function ParkingAdmin() {
               ))}
               {parkings.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
                     No hay parqueaderos registrados
                   </td>
                 </tr>
@@ -164,6 +184,26 @@ export default function ParkingAdmin() {
                 />
               </div>
               <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">NIT</label>
+                <input 
+                  type="text" 
+                  value={formData.nit}
+                  onChange={(e) => setFormData({...formData, nit: e.target.value})}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  placeholder="Ej: 900123456-7"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Teléfono</label>
+                <input 
+                  type="text" 
+                  value={formData.telefono}
+                  onChange={(e) => setFormData({...formData, telefono: e.target.value})}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  placeholder="Ej: 3001234567"
+                />
+              </div>
+              <div className="mb-4">
                 <label className="block text-gray-700 text-sm font-bold mb-2">Dirección</label>
                 <input 
                   type="text" 
@@ -171,6 +211,26 @@ export default function ParkingAdmin() {
                   onChange={(e) => setFormData({...formData, direccion: e.target.value})}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Horario</label>
+                <input 
+                  type="text" 
+                  value={formData.horario}
+                  onChange={(e) => setFormData({...formData, horario: e.target.value})}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  placeholder="Ej: Lun - Dom 6am - 10pm"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">Observación</label>
+                <textarea 
+                  value={formData.observacion}
+                  onChange={(e) => setFormData({...formData, observacion: e.target.value})}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  rows={3}
+                  placeholder="Información adicional..."
                 />
               </div>
               <div className="flex justify-end gap-2">

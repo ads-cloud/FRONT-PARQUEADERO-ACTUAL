@@ -1,13 +1,16 @@
 import React, { forwardRef } from 'react';
 import QRCode from 'react-qr-code';
 
-export const TicketPrint = forwardRef(({ ticket }, ref) => {
+export const TicketPrint = forwardRef(({ ticket, parking }, ref) => {
   if (!ticket) return null;
 
   return (
     <div ref={ref} id="ticket-print-area" className="p-4 bg-white border hidden print:block" style={{ width: '80mm' }}>
-      <div className="text-center font-bold text-lg mb-2">PARQUEADERO EJEMPLO</div>
-      <div className="text-center text-sm mb-4">NIT: 123456789</div>
+      <div className="text-center font-bold text-lg mb-1">{parking?.nombre ?? 'Parqueadero'}</div>
+      {parking?.nit && <div className="text-center text-xs mb-1">NIT: {parking.nit}</div>}
+      {parking?.telefono && <div className="text-center text-xs mb-1">Tel: {parking.telefono}</div>}
+      {parking?.horario && <div className="text-center text-xs mb-4">{parking.horario}</div>}
+      {!parking?.telefono && !parking?.horario && <div className="mb-4" />}
       
       <div className="border-t border-b py-2 mb-4">
         <div className="flex justify-between">
@@ -30,7 +33,7 @@ export const TicketPrint = forwardRef(({ ticket }, ref) => {
 
       <div className="text-center text-xs">
         Ticket #: {ticket.id}<br/>
-        Conserve este tiquete
+        {parking?.observacion ?? 'Conserve este tiquete'}
       </div>
     </div>
   );
