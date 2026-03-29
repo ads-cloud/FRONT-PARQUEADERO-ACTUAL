@@ -27,6 +27,11 @@ function UsuariosAdmin() {
   const [users, setUsers] = useState([]);
   const [parkings, setParkings] = useState([]); // For Super Admin
   const [loading, setLoading] = useState(true);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetTargetUser, setResetTargetUser] = useState(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
   
   // Form State
   const [formData, setFormData] = useState({
@@ -120,19 +125,44 @@ function UsuariosAdmin() {
     }
   };
 
-  const handleResetPassword = async (targetUser) => {
-    const newPassword = window.prompt(`Nueva contraseña temporal para ${targetUser.username}:`);
-    if (!newPassword) return;
-    if (newPassword.length < 6) {
+  const openResetModal = (targetUser) => {
+    setResetTargetUser(targetUser);
+    setResetPassword('');
+    setResetPasswordConfirm('');
+    setResetModalOpen(true);
+  };
+
+  const closeResetModal = () => {
+    setResetModalOpen(false);
+    setResetTargetUser(null);
+    setResetPassword('');
+    setResetPasswordConfirm('');
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetTargetUser) return;
+    if (!resetPassword) {
+      toast.error('Debe ingresar la nueva contraseña temporal');
+      return;
+    }
+    if (resetPassword.length < 6) {
       toast.error('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    if (resetPassword !== resetPasswordConfirm) {
+      toast.error('La confirmación de contraseña no coincide');
       return;
     }
 
     try {
-      await axios.post(`/api/users/${targetUser.id}/reset-password`, { newPassword });
+      setResetLoading(true);
+      await axios.post(`/api/users/${resetTargetUser.id}/reset-password`, { newPassword: resetPassword });
       toast.success('Contraseña restablecida. Se solicitará cambio al próximo ingreso.');
+      closeResetModal();
     } catch (err) {
       toast.error(err.response?.data?.message || 'No fue posible restablecer contraseña');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -262,7 +292,7 @@ function UsuariosAdmin() {
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   {(user.id !== u.id && (isSuperAdmin || (u.role !== 'ADMIN' && u.role !== 'SUPER_ADMIN'))) ? (
                     <button
-                      onClick={() => handleResetPassword(u)}
+                      onClick={() => openResetModal(u)}
                       className="text-amber-700 hover:text-amber-900 bg-amber-50 p-2 rounded-full hover:bg-amber-100 transition-colors mr-2"
                       title="Resetear contraseña"
                     >
@@ -292,6 +322,66 @@ function UsuariosAdmin() {
           </tbody>
         </table>
       </div>
+
+      {resetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b bg-slate-50">
+              <h3 className="text-lg font-bold text-slate-800">Restablecer contraseña</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Usuario: <span className="font-semibold text-slate-700">{resetTargetUser?.username}</span>
+              </p>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña temporal</label>
+                <input
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar contraseña</label>
+                <input
+                  type="password"
+                  value={resetPasswordConfirm}
+                  onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  placeholder="Repita la contraseña"
+                />
+              </div>
+
+              <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded p-2.5">
+                El usuario deberá cambiar esta contraseña en su próximo inicio de sesión.
+              </p>
+            </div>
+
+            <div className="px-5 py-4 border-t bg-slate-50 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeResetModal}
+                disabled={resetLoading}
+                className="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300 font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                disabled={resetLoading}
+                className={`px-4 py-2 rounded-lg text-white font-medium ${resetLoading ? 'bg-amber-300' : 'bg-amber-600 hover:bg-amber-700'}`}
+              >
+                {resetLoading ? 'Guardando...' : 'Restablecer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
