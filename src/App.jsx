@@ -5,8 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard';
-import TicketEntry from './components/TicketEntry';
-import TicketExit from './components/TicketExit';
+import TicketOperations from './components/TicketOperations';
 import TarifasAdmin from './components/TarifasAdmin';
 import UsuariosAdmin from './components/UsuariosAdmin';
 import ParkingAdmin from './components/ParkingAdmin';
@@ -60,6 +59,26 @@ const ModuleRoute = ({ moduleCode, children }) => {
   return children;
 };
 
+const DashboardIndexRoute = () => {
+  const { user, getDefaultRoute } = useAuth();
+  if (user?.role === 'SUPER_ADMIN') {
+    return <Navigate to="/dashboard/admin-parking" replace />;
+  }
+  return (
+    <ModuleRoute moduleCode="DASHBOARD">
+      <HomeStats />
+    </ModuleRoute>
+  );
+};
+
+const AdminPanelRoute = () => {
+  const { user } = useAuth();
+  if (user?.role === 'SUPER_ADMIN') {
+    return <Navigate to="/dashboard/admin-parking" replace />;
+  }
+  return <AdminPanel />;
+};
+
 function AppRoutes() {
   return (
     <Routes>
@@ -77,7 +96,7 @@ function AppRoutes() {
         path="/admin-panel"
         element={
           <PrivateRoute>
-            <AdminPanel />
+            <AdminPanelRoute />
           </PrivateRoute>
         }
       />
@@ -90,19 +109,12 @@ function AppRoutes() {
           </PrivateRoute>
         }
       >
-        <Route
-          index
-          element={
-            <ModuleRoute moduleCode="DASHBOARD">
-              <HomeStats />
-            </ModuleRoute>
-          }
-        />
+        <Route index element={<DashboardIndexRoute />} />
         <Route
           path="entrada"
           element={
             <ModuleRoute moduleCode="TICKET_ENTRY">
-              <TicketEntry />
+              <TicketOperations />
             </ModuleRoute>
           }
         />
@@ -110,7 +122,7 @@ function AppRoutes() {
           path="salida"
           element={
             <ModuleRoute moduleCode="TICKET_EXIT">
-              <TicketExit />
+              <TicketOperations />
             </ModuleRoute>
           }
         />

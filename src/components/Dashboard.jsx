@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -10,20 +10,21 @@ const ROLE_LABELS = {
   CASHIER: 'Cajero',
 };
 
-const SECTION_LABELS = {
-  MAIN: null,
-  OPERATION: 'Operación',
-  ADMINISTRATION: 'Administración',
-};
-
 export default function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, switchParking } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [parkingName, setParkingName] = useState('Cargando...');
+  const [switchingBranch, setSwitchingBranch] = useState(false);
+
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   useEffect(() => {
+    if (isSuperAdmin) {
+      setParkingName('Gestión Multi-Parqueadero');
+      return;
+    }
     if (!user?.parkingId) {
       setParkingName('Sin Sede Seleccionada');
       return;
@@ -32,7 +33,7 @@ export default function Dashboard() {
       .get('/api/parking/me')
       .then((res) => setParkingName(res.data?.name || 'Mi Parqueadero'))
       .catch(() => setParkingName('Mi Parqueadero'));
-  }, [user?.parkingId]);
+  }, [user?.parkingId, isSuperAdmin]);
 
   const handleLogout = () => {
     logout();
@@ -40,135 +41,175 @@ export default function Dashboard() {
     navigate('/login');
   };
 
-  const isActive = (path) => {
-    return location.pathname === path
-      ? 'bg-blue-600 shadow-lg translate-x-1 pl-4 text-white'
-      : 'hover:bg-slate-700 text-slate-300 hover:text-white hover:pl-4';
-  };
-
-  const visiblePermissions = (user?.permissions || []).filter((p) => p.canView);
-
-  const groupedBySection = visiblePermissions.reduce((acc, perm) => {
-    const sec = perm.section || 'OPERATION';
-    if (!acc[sec]) acc[sec] = [];
-    acc[sec].push(perm);
-    return acc;
-  }, {});
-
-  const currentModule = (user?.permissions || []).find(
-    (p) => p.route === location.pathname,
+  const visiblePermissions = useMemo(
+    () =>
+      (user?.permissions || []).filter(
+        (p) => p.canView && (!isSuperAdmin || p.moduleCode !== 'DASHBOARD'),
+      ),
+    [user?.permissions, isSuperAdmin],
   );
 
-  return (
-    <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
-      {/* Mobile Overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-20 md:hidden transition-opacity"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+  // Unify TICKET_ENTRY and TICKET_EXIT into a single Top-Bar item ("Entradas / Salidas")
+  const navItems = useMemo(() => {
+    const hasEntry = visiblePermissions.some((p) => p.moduleCode === 'TICKET_ENTRY');
+    const hasExit = visiblePermissions.some((p) => p.moduleCode === 'TICKET_EXIT');
+    const items = [];
+    let operationsAdded = false;
 
-      {/* Sidebar */}
-      <aside
-        className={`
-        fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-white flex flex-col shadow-2xl transition-transform duration-300 ease-in-out
-        md:relative md:translate-x-0
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}
-      >
-        <div className="p-6 border-b border-slate-700 bg-slate-800">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-blue-400">
-                🚗 {parkingName}
-              </h1>
-              <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">
-                {user?.username} ({user?.roleName || ROLE_LABELS[user?.role] || user?.role})
-              </p>
-              {(user?.role === 'SUPER_ADMIN' ||
-                (user?.managedParkings && user?.managedParkings.length > 1)) && (
+    for (const perm of visiblePermissions) {
+      if (perm.moduleCode === 'TICKET_ENTRY' || perm.moduleCode === 'TICKET_EXIT') {
+        if (!operationsAdded) {
+          operationsAdded = true;
+          items.push({
+            moduleCode: 'TICKET_OPS',
+            moduleName:
+              hasEntry && hasExit
+                ? 'Entradas y Salidas'
+                : perm.moduleName,
+            route: hasEntry ? '/dashboard/entrada' : '/dashboard/salida',
+            matchRoutes: ['/dashboard/entrada', '/dashboard/salida'],
+            icon: '🚘',
+            section: 'OPERATION',
+          });
+        }
+      } else {
+        items.push({
+          ...perm,
+          matchRoutes: [perm.route],
+        });
+      }
+    }
+    return items;
+  }, [visiblePermissions]);
+
+  const isRouteActive = (item) => {
+    if (item.matchRoutes) {
+      return item.matchRoutes.includes(location.pathname);
+    }
+    return location.pathname === item.route;
+  };
+
+  const canSwitchBranch =
+    !isSuperAdmin &&
+    user?.managedParkings &&
+    user?.managedParkings.length > 1;
+
+  const handleQuickSwitchBranch = async (e) => {
+    const targetId = Number(e.target.value);
+    if (!targetId || targetId === Number(user?.parkingId)) return;
+    try {
+      setSwitchingBranch(true);
+      const ok = await switchParking(targetId);
+      if (ok) {
+        toast.success('Sede activa cambiada');
+      } else {
+        toast.error('No se pudo cambiar de sede');
+      }
+    } finally {
+      setSwitchingBranch(false);
+    }
+  };
+
+  const defaultHomeLink = isSuperAdmin ? '/dashboard/admin-parking' : '/dashboard';
+
+  return (
+    <div className="flex flex-col h-screen bg-slate-100 font-sans overflow-hidden">
+      {/* BARRA SUPERIOR ÚNICA COMPACTA (Sin barra lateral duplicada) */}
+      <header className="bg-slate-900 text-white shadow-md z-30 shrink-0 border-b border-slate-800">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-3">
+          {/* Izquierda: Identidad / Sede activa (o Panel Super Admin) */}
+          <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+            <Link
+              to={defaultHomeLink}
+              className="flex items-center gap-2.5 group min-w-0"
+            >
+              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-lg shadow-xs group-hover:bg-blue-500 transition-colors shrink-0">
+                {isSuperAdmin ? '🏛️' : '🚗'}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm sm:text-base text-white truncate max-w-[150px] sm:max-w-[210px]">
+                    {isSuperAdmin ? 'Panel Super Admin' : parkingName}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-none truncate">
+                  {isSuperAdmin
+                    ? 'Parqueaderos y Sedes'
+                    : ROLE_LABELS[user?.role] || user?.roleName || user?.role}
+                </p>
+              </div>
+            </Link>
+
+            {canSwitchBranch && (
+              <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                <select
+                  value={user?.parkingId || ''}
+                  disabled={switchingBranch}
+                  onChange={handleQuickSwitchBranch}
+                  title="Cambiar rápidamente entre las sedes asignadas a su empresa"
+                  className="bg-slate-800 hover:bg-slate-700 text-blue-200 border border-slate-700 rounded-md px-2 py-1 text-xs font-semibold outline-none cursor-pointer"
+                >
+                  {(user?.managedParkings || []).map((mp) => (
+                    <option key={mp.id} value={mp.id}>
+                      📍 {mp.name}
+                    </option>
+                  ))}
+                </select>
                 <Link
                   to="/admin-panel"
-                  className="block text-xs text-blue-300 hover:text-white mt-2 underline"
+                  title="Ver resumen comparativo de todas mis sedes"
+                  className="inline-flex items-center gap-1 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 px-2 py-1 rounded-md transition-colors"
                 >
-                  &larr; Cambiar Parqueadero
+                  <span>Todas ({user.managedParkings.length})</span>
                 </Link>
-              )}
-            </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-slate-400 hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          {['MAIN', 'OPERATION', 'ADMINISTRATION'].map((sectionKey, idx) => {
-            const items = groupedBySection[sectionKey] || [];
-            if (items.length === 0) return null;
-
-            return (
-              <div
-                key={sectionKey}
-                className={
-                  idx > 0 && SECTION_LABELS[sectionKey]
-                    ? 'pt-4 mt-4 border-t border-slate-700 space-y-1'
-                    : 'space-y-1'
-                }
-              >
-                {SECTION_LABELS[sectionKey] && (
-                  <p className="text-xs font-bold text-slate-500 uppercase px-3 mb-2">
-                    {SECTION_LABELS[sectionKey]}
-                  </p>
-                )}
-                {items.map((item) => (
-                  <Link
-                    key={item.moduleCode}
-                    to={item.route}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ${isActive(item.route)}`}
-                  >
-                    <span className="text-xl">{item.icon || '📦'}</span>
-                    <span className="font-medium">{item.moduleName}</span>
-                  </Link>
-                ))}
               </div>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 bg-slate-800 border-t border-slate-700">
-          <div className="flex items-center space-x-3 mb-4 px-2">
-            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center font-bold text-lg text-white">
-              {user?.username?.charAt(0).toUpperCase() || 'U'}
-            </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-bold truncate">
-                {user?.username || 'Usuario'}
-              </p>
-              <p className="text-xs text-slate-400">
-                {user?.roleName || ROLE_LABELS[user?.role] || user?.role || 'Operador'}
-              </p>
-            </div>
+            )}
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center space-x-2 bg-red-600/90 hover:bg-red-700 text-white p-2 rounded-lg transition-colors text-sm font-semibold shadow-md"
-          >
-            <span>Cerrar Sesión</span>
-          </button>
-        </div>
-      </aside>
 
-      <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-gray-50">
-        <header className="bg-white shadow-sm p-4 flex justify-between items-center px-4 md:px-8 shrink-0 z-20 sticky top-0">
-          <div className="flex items-center gap-4">
+          {/* Centro: Navegación Horizontal de Módulos */}
+          <nav className="hidden lg:flex items-center gap-1 overflow-x-auto py-1">
+            {navItems.map((item) => {
+              const active = isRouteActive(item);
+              return (
+                <Link
+                  key={item.moduleCode}
+                  to={item.route}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold whitespace-nowrap transition-all ${
+                    active
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <span className="text-base leading-none">{item.icon || '📦'}</span>
+                  <span>{item.moduleName}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Derecha: Usuario + Cerrar Sesión + Botón Móvil */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden sm:flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 px-2.5 py-1 rounded-lg">
+              <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white">
+                {user?.username?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <span className="text-xs font-semibold text-slate-200 max-w-[110px] truncate">
+                {user?.username}
+              </span>
+            </div>
+
             <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 -ml-2 rounded-md text-gray-600 hover:bg-gray-100 md:hidden focus:outline-none"
+              onClick={handleLogout}
+              title="Cerrar Sesión"
+              className="bg-red-600/90 hover:bg-red-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <span>Salir</span>
+            </button>
+
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 focus:outline-none"
+              aria-label="Abrir menú"
             >
               <svg
                 className="w-6 h-6"
@@ -180,27 +221,59 @@ export default function Dashboard() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
+                  d={
+                    mobileMenuOpen
+                      ? 'M6 18L18 6M6 6l12 12'
+                      : 'M4 6h16M4 12h16M4 18h16'
+                  }
                 />
               </svg>
             </button>
-
-            <h2 className="text-lg md:text-xl font-bold text-gray-700 truncate">
-              {currentModule?.moduleName || 'Panel de Control'}
-            </h2>
           </div>
+        </div>
 
-          <div className="text-sm text-gray-500 hidden sm:block">
-            {new Date().toLocaleDateString('es-ES', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
+        {/* Menú desplegable compacto en pantallas pequeñas / tablets */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden bg-slate-900 border-t border-slate-800 px-3 pt-2 pb-3 space-y-1">
+            <div className="flex flex-wrap gap-1.5">
+              {navItems.map((item) => {
+                const active = isRouteActive(item);
+                return (
+                  <Link
+                    key={item.moduleCode}
+                    to={item.route}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${
+                      active
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-800/70 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    <span>{item.icon || '📦'}</span>
+                    <span>{item.moduleName}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            {canSwitchBranch && (
+              <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+                <Link
+                  to="/admin-panel"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-xs font-semibold text-blue-400 hover:underline"
+                >
+                  ⇄ Cambiar de Sede / Parqueadero
+                </Link>
+                <span className="text-xs text-slate-400">{user?.username}</span>
+              </div>
+            )}
           </div>
-        </header>
+        )}
+      </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+      {/* ÁREA DE CONTENIDO A PANTALLA COMPLETA */}
+      <main className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6">
+        <div className="max-w-[1600px] mx-auto">
           <Outlet />
         </div>
       </main>

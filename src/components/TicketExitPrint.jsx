@@ -13,11 +13,19 @@ export const TicketExitPrint = forwardRef(({ receipt, parking }, ref) => {
       className="p-4 bg-white border hidden print:block"
       style={{ width: '80mm' }}
     >
+      {parking?.companyName && (
+        <div className="text-center font-bold text-sm uppercase">
+          {parking.companyName}
+        </div>
+      )}
       <div className="text-center font-bold text-lg mb-1">
         {parking?.name ?? 'Parqueadero'}
       </div>
       {parking?.taxId && (
         <div className="text-center text-xs mb-1">NIT: {parking.taxId}</div>
+      )}
+      {parking?.address && (
+        <div className="text-center text-xs mb-1">{parking.address}</div>
       )}
       {parking?.phone && (
         <div className="text-center text-xs mb-1">Tel: {parking.phone}</div>

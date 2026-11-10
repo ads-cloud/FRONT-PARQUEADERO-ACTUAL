@@ -22,7 +22,7 @@ export default function Login() {
         return;
       }
       toast.success('¡Bienvenido de nuevo!');
-      navigate('/dashboard');
+      navigate(result.defaultRoute || '/dashboard');
     } else {
       toast.error('Usuario o contraseña incorrectos');
     }

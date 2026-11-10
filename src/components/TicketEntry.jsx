@@ -18,7 +18,7 @@ const getIconForType = (code) => {
   return '🚗';
 };
 
-export default function TicketEntry() {
+export default function TicketEntry({ occupancyByType = [], onTicketCreated }) {
   const { user } = useAuth();
   const [licensePlate, setLicensePlate] = useState('');
   const [vehicleTypeCode, setVehicleTypeCode] = useState('');
@@ -29,9 +29,11 @@ export default function TicketEntry() {
   const [loadingTypes, setLoadingTypes] = useState(true);
   const [parking, setParking] = useState(null);
 
+  const inputRef = useRef();
   const printRef = useRef();
 
   useEffect(() => {
+    inputRef.current?.focus();
     const fetchTypes = async () => {
       try {
         setLoadingTypes(true);
@@ -106,6 +108,10 @@ export default function TicketEntry() {
       setLicensePlate('');
       setVehicleTypeCode('');
       setIsValid(false);
+      if (typeof onTicketCreated === 'function') {
+        onTicketCreated(created);
+      }
+      inputRef.current?.focus();
       setTimeout(() => handlePrint(), 400);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error al registrar ingreso', {
@@ -119,89 +125,182 @@ export default function TicketEntry() {
     if (val.length <= 10) setLicensePlate(val);
   };
 
-  return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto flex flex-col justify-center min-h-[500px]">
-      <div className="bg-white p-6 md:p-10 rounded-2xl shadow-xl border border-gray-100 transition-all duration-300 hover:shadow-2xl">
-        <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center text-gray-800">
-          Registrar Nuevo Ingreso
-        </h2>
+  const selectedTariff = vehicleTypes.find(
+    (vt) => vt.vehicleTypeCode === vehicleTypeCode,
+  );
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <div>
-            <label className="block text-sm font-bold text-gray-500 mb-2 uppercase tracking-widest text-center">
-              Placa del Vehículo
-            </label>
-            <div className="relative max-w-xs mx-auto">
-              <input
-                className={`w-full text-3xl md:text-5xl font-mono p-4 border-2 rounded-xl uppercase text-center tracking-[0.2em] outline-none transition-all shadow-inner
-                  ${isValid ? 'border-green-500 bg-green-50 text-green-800' : 'border-gray-300 focus:border-blue-500'}
-                  ${licensePlate.length >= 6 && !isValid ? 'border-red-500 bg-red-50 text-red-800' : ''}
-                `}
-                placeholder="------"
-                value={licensePlate}
-                onChange={handleChange}
-                autoFocus
-              />
-              {licensePlate.length >= 5 && (
-                <div className="absolute -right-8 md:-right-12 top-1/2 -translate-y-1/2 text-2xl md:text-3xl">
-                  {isValid ? '✅' : '❌'}
-                </div>
-              )}
+  return (
+    <div className="bg-white rounded-xl shadow-xs border border-slate-200/90 p-5 md:p-6">
+      <form
+        onSubmit={handleSubmit}
+        className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center"
+      >
+        {/* Columna Izquierda: Placa Vehicular */}
+        <div className="lg:col-span-5 flex flex-col items-center justify-center bg-slate-50/70 border border-slate-200/80 rounded-xl p-5">
+          <label className="block text-xs font-bold text-slate-500 mb-2.5 uppercase tracking-widest">
+            Placa / Código de Ingreso
+          </label>
+
+          <div className="relative w-full max-w-xs">
+            <div
+              className={`rounded-xl p-1.5 transition-all duration-200 shadow-xs ${
+                isValid
+                  ? 'bg-emerald-500 ring-4 ring-emerald-100'
+                  : licensePlate.length >= 6 && !isValid
+                    ? 'bg-red-500 ring-4 ring-red-100'
+                    : 'bg-amber-400'
+              }`}
+            >
+              <div className="bg-amber-50 rounded-lg border-2 border-slate-900 px-3 py-2.5 flex flex-col items-center">
+                <span className="text-[9px] font-extrabold tracking-[0.3em] text-slate-600 uppercase mb-0.5">
+                  COLOMBIA • PARQUEADERO
+                </span>
+                <input
+                  ref={inputRef}
+                  className="w-full bg-transparent text-3xl sm:text-4xl font-black font-mono uppercase text-center tracking-[0.2em] text-slate-900 outline-none placeholder:text-slate-300"
+                  placeholder="ABC123"
+                  value={licensePlate}
+                  onChange={handleChange}
+                  autoFocus
+                />
+              </div>
             </div>
-            <p className="text-gray-400 text-center text-xs mt-2">
-              Detecta automáticamente el tipo o selecciónelo manualmente abajo
-            </p>
+
+            {licensePlate.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLicensePlate('');
+                  setVehicleTypeCode('');
+                  setIsValid(false);
+                  inputRef.current?.focus();
+                }}
+                className="absolute -right-2.5 -top-2.5 w-7 h-7 rounded-full bg-slate-800 text-white hover:bg-slate-700 text-xs font-bold shadow flex items-center justify-center"
+                title="Limpiar placa"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
-          {loadingTypes ? (
-            <div className="text-center text-gray-400">Cargando tipos...</div>
-          ) : (
-            <div
-              className={`grid gap-4 ${vehicleTypes.length > 2 ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2'}`}
-            >
-              {vehicleTypes.map((vt) => (
-                <button
-                  type="button"
-                  key={vt.id}
-                  onClick={() => {
-                    setVehicleTypeCode(vt.vehicleTypeCode);
-                    if (isValidPlate(licensePlate)) setIsValid(true);
-                  }}
-                  className={`
-                    p-4 rounded-xl border-2 flex flex-col items-center justify-center transition-all duration-300 cursor-pointer
-                    ${
-                      vehicleTypeCode === vt.vehicleTypeCode
-                        ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-lg scale-105'
-                        : 'border-gray-100 text-gray-400 hover:border-gray-300 opacity-75'
-                    }
-                  `}
-                >
-                  <span className="text-3xl md:text-4xl mb-2">
-                    {getIconForType(vt.vehicleTypeCode)}
-                  </span>
-                  <span className="font-bold text-xs uppercase tracking-wider truncate w-full text-center">
-                    {vt.vehicleTypeName || vt.vehicleTypeCode}
-                  </span>
-                </button>
-              ))}
+          <div className="mt-3 text-xs text-center">
+            {licensePlate.length === 0 ? (
+              <span className="text-slate-400">
+                Ej: <strong className="font-mono">ABC123</strong> (Carro),{' '}
+                <strong className="font-mono">ABC12D</strong> (Moto),{' '}
+                <strong className="font-mono">123456</strong> (Bici)
+              </span>
+            ) : isValid ? (
+              <span className="text-emerald-700 font-bold">
+                ✅ Placa válida — Presione Enter para imprimir
+              </span>
+            ) : (
+              <span className="text-amber-700 font-medium">
+                Complete los 6 caracteres de la placa
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Columna Derecha: Selección de Vehículo con Cupos Independientes y Botón */}
+        <div className="lg:col-span-7 flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Tipo de Vehículo y Cupo Disponible
+              </span>
+              {selectedTariff && (
+                <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
+                  ${Number(selectedTariff.minuteRate || 0).toLocaleString('es-CO')}/min • $
+                  {Number(selectedTariff.hourRate || 0).toLocaleString('es-CO')}/h
+                </span>
+              )}
             </div>
-          )}
+
+            {loadingTypes ? (
+              <div className="grid grid-cols-3 gap-3">
+                {[1, 2, 3].map((n) => (
+                  <div
+                    key={n}
+                    className="h-24 rounded-xl bg-slate-100 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div
+                className={`grid gap-3 ${
+                  vehicleTypes.length > 2 ? 'grid-cols-3' : 'grid-cols-2'
+                }`}
+              >
+                {vehicleTypes.map((vt) => {
+                  const active = vehicleTypeCode === vt.vehicleTypeCode;
+                  const occInfo = occupancyByType.find(
+                    (o) => o.code === vt.vehicleTypeCode,
+                  );
+                  const cap = occInfo ? occInfo.capacity : Number(vt.capacity || 0);
+                  const available = occInfo ? occInfo.available : cap;
+                  const isFull = cap > 0 && available <= 0;
+
+                  return (
+                    <button
+                      type="button"
+                      key={vt.id}
+                      onClick={() => {
+                        setVehicleTypeCode(vt.vehicleTypeCode);
+                        if (isValidPlate(licensePlate)) setIsValid(true);
+                        inputRef.current?.focus();
+                      }}
+                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center transition-all cursor-pointer relative ${
+                        active
+                          ? 'border-blue-600 bg-blue-50/80 text-blue-900 shadow-xs'
+                          : 'border-slate-200 bg-slate-50/40 text-slate-600 hover:border-slate-300 hover:bg-white'
+                      }`}
+                    >
+                      <span className="text-2xl sm:text-3xl mb-1">
+                        {getIconForType(vt.vehicleTypeCode)}
+                      </span>
+                      <span className="font-bold text-xs uppercase tracking-wider">
+                        {vt.vehicleTypeName || vt.vehicleTypeCode}
+                      </span>
+                      <span className="text-[11px] text-slate-500 mt-0.5">
+                        ${Number(vt.minuteRate || 0).toLocaleString('es-CO')}/min
+                      </span>
+                      <span
+                        className={`mt-1.5 text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                          isFull
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        {isFull
+                          ? 'Sin cupo (0)'
+                          : `${available} / ${cap} libres`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           <button
             type="submit"
             disabled={!isValid || !vehicleTypeCode}
-            className={`w-full font-extrabold py-5 rounded-xl text-lg md:text-xl shadow-lg transition-all transform active:scale-[0.98] 
-              ${
-                isValid && vehicleTypeCode
-                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white cursor-pointer shadow-green-200'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
-              }
-            `}
+            className={`w-full font-extrabold py-4 rounded-xl text-base shadow-md transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 ${
+              isValid && vehicleTypeCode
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none'
+            }`}
           >
-            {isValid ? 'CONFIRMAR INGRESO 🎟️' : 'Complete la Placa...'}
+            <span>🎟️</span>
+            <span>
+              {isValid
+                ? `CONFIRMAR INGRESO E IMPRIMIR TIQUETE (${licensePlate})`
+                : 'INGRESE UNA PLACA VÁLIDA PARA REGISTRAR'}
+            </span>
           </button>
-        </form>
-      </div>
+        </div>
+      </form>
 
       <div className="hidden">
         <TicketPrint ref={printRef} ticket={lastTicket} parking={parking} />

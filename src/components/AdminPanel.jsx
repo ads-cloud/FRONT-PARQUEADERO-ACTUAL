@@ -39,19 +39,21 @@ export default function AdminPanel() {
   if (loading) return <div className="p-8 text-center">Cargando panel...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-slate-100 p-6 md:p-8">
       <header className="mb-8 flex justify-between items-center max-w-7xl mx-auto">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Selección de Sede (Multi-Tenant)
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
+            Selección de Sede (Multi-Sede)
           </h1>
-          <p className="text-gray-500">Bienvenido, {user?.username}</p>
+          <p className="text-sm text-slate-500">
+            Bienvenido, <strong>{user?.username}</strong> — Seleccione la sede en la que desea operar
+          </p>
         </div>
         <button
           onClick={() => navigate('/dashboard')}
-          className="text-blue-600 hover:underline font-medium"
+          className="text-blue-600 hover:underline font-semibold text-sm"
         >
-          Ir a Dashboard Actual &rarr;
+          Volver al Dashboard &rarr;
         </button>
       </header>
 
@@ -59,46 +61,71 @@ export default function AdminPanel() {
         {parkings.map((p) => (
           <div
             key={p.id}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden"
+            className="bg-white rounded-xl shadow-xs border border-slate-200 hover:shadow-md transition-shadow overflow-hidden flex flex-col justify-between"
           >
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-800">{p.name}</h3>
-                  <p className="text-sm text-gray-500 flex items-center gap-1">
+                  {p.companyName && (
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 inline-block mb-1">
+                      🏛️ {p.companyName} {p.taxId ? `• NIT ${p.taxId}` : ''}
+                    </span>
+                  )}
+                  <h3 className="text-xl font-bold text-slate-800">{p.name}</h3>
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                     📍 {p.address}
                   </p>
                 </div>
                 {Number(user?.parkingId) === Number(p.id) && (
-                  <span className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
-                    Activo
+                  <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                    Activa
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-blue-50 p-3 rounded-lg text-center">
-                  <p className="text-xs text-blue-600 uppercase font-bold">
-                    Ocupación
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-blue-50/80 p-3 rounded-lg text-center border border-blue-100">
+                  <p className="text-[11px] text-blue-600 uppercase font-bold">
+                    Ocupación Total
                   </p>
-                  <p className="text-2xl font-bold text-blue-900">
+                  <p className="text-xl font-extrabold text-blue-900">
                     {p.occupancy} / {p.totalCapacity || 100}
                   </p>
                 </div>
-                <div className="bg-green-50 p-3 rounded-lg text-center">
-                  <p className="text-xs text-green-600 uppercase font-bold">
+                <div className="bg-emerald-50/80 p-3 rounded-lg text-center border border-emerald-100">
+                  <p className="text-[11px] text-emerald-600 uppercase font-bold">
                     Ingresos Hoy
                   </p>
-                  <p className="text-xl font-bold text-green-900">
+                  <p className="text-lg font-extrabold text-emerald-900">
                     ${Number(p.todayIncome || 0).toLocaleString('es-CO')}
                   </p>
                 </div>
+                {p.byVehicleType && p.byVehicleType.length > 0 && (
+                  <div className="col-span-2 grid grid-cols-3 gap-2">
+                    {p.byVehicleType.map((vt) => (
+                      <div
+                        key={vt.vehicleTypeCode}
+                        className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-center"
+                      >
+                        <div className="text-[10px] font-bold text-slate-500 uppercase truncate">
+                          {vt.vehicleTypeName}
+                        </div>
+                        <div className="text-xs font-extrabold text-slate-800 mt-0.5">
+                          {vt.occupied}/{vt.capacity}
+                        </div>
+                        <div className="text-[10px] text-emerald-700 font-semibold">
+                          {vt.available} libres
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {p.expiringSubscriptionsCount > 0 && (
-                  <div className="col-span-2 bg-red-50 p-3 rounded-lg flex items-center justify-between text-red-800 border border-red-100">
-                    <span className="text-sm font-semibold flex items-center gap-2">
+                  <div className="col-span-2 bg-red-50 p-2.5 rounded-lg flex items-center justify-between text-red-800 border border-red-100">
+                    <span className="text-xs font-semibold flex items-center gap-1.5">
                       ⚠️ Mensualidades por vencer
                     </span>
-                    <span className="bg-red-200 text-red-900 text-xs font-bold px-2 py-1 rounded-full">
+                    <span className="bg-red-200 text-red-900 text-xs font-bold px-2 py-0.5 rounded-full">
                       {p.expiringSubscriptionsCount}
                     </span>
                   </div>
@@ -107,23 +134,23 @@ export default function AdminPanel() {
 
               <button
                 onClick={() => handleEnter(p.id)}
-                className={`w-full py-2.5 px-4 rounded-lg font-medium transition-colors ${
+                className={`w-full py-2.5 px-4 rounded-lg font-bold text-sm transition-colors ${
                   Number(user?.parkingId) === Number(p.id)
-                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
               >
                 {Number(user?.parkingId) === Number(p.id)
-                  ? 'Entrar a esta sede (Actual)'
-                  : 'Administrar / Operar Sede'}
+                  ? 'Continuar en esta Sede (Actual)'
+                  : 'Cambiar a esta Sede'}
               </button>
             </div>
           </div>
         ))}
 
         {parkings.length === 0 && (
-          <div className="col-span-full text-center py-12 text-gray-400 border-2 border-dashed rounded-xl">
-            No tienes parqueaderos asignados.
+          <div className="col-span-full text-center py-12 text-slate-400 border-2 border-dashed rounded-xl">
+            No tienes sedes asignadas.
           </div>
         )}
       </main>

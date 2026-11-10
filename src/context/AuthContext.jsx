@@ -33,6 +33,19 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
+  const computeDefaultRoute = (profile) => {
+    if (!profile || !Array.isArray(profile.permissions)) return '/dashboard';
+    const visible = profile.permissions.filter((p) => p.canView);
+    if (profile.role === 'SUPER_ADMIN') {
+      const parkingsPerm = visible.find((p) => p.moduleCode === 'PARKINGS');
+      if (parkingsPerm) return parkingsPerm.route || '/dashboard/admin-parking';
+      return visible[0]?.route || '/dashboard/admin-parking';
+    }
+    const dashboardPerm = visible.find((p) => p.moduleCode === 'DASHBOARD');
+    if (dashboardPerm) return dashboardPerm.route || '/dashboard';
+    return visible[0]?.route || '/dashboard';
+  };
+
   const login = async (username, password) => {
     try {
       const res = await axios.post('/api/auth/login', { username, password });
@@ -47,10 +60,11 @@ export const AuthProvider = ({ children }) => {
       return {
         success: true,
         mustChangePassword: !!profileRes.data?.mustChangePassword,
+        defaultRoute: computeDefaultRoute(profileRes.data),
       };
     } catch (e) {
       console.error(e);
-      return { success: false, mustChangePassword: false };
+      return { success: false, mustChangePassword: false, defaultRoute: '/dashboard' };
     }
   };
 
@@ -115,11 +129,7 @@ export const AuthProvider = ({ children }) => {
   );
 
   const getDefaultRoute = useCallback(() => {
-    if (!user || !Array.isArray(user.permissions)) return '/dashboard';
-    const visible = user.permissions.filter((p) => p.canView);
-    const dashboardPerm = visible.find((p) => p.moduleCode === 'DASHBOARD');
-    if (dashboardPerm) return dashboardPerm.route || '/dashboard';
-    return visible[0]?.route || '/dashboard';
+    return computeDefaultRoute(user);
   }, [user]);
 
   const value = {

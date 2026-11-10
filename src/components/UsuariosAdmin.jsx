@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -112,6 +112,24 @@ function UsuariosAdmin() {
     }
   }, [user, user?.parkingId]);
 
+  // Agrupamos las sedes por Razón Social para facilitar asignar 1 Admin por Razón Social o 1 Admin por Sede
+  const parkingsByCompany = useMemo(() => {
+    const groups = {};
+    for (const p of parkings) {
+      const key = p.companyId || '0';
+      if (!groups[key]) {
+        groups[key] = {
+          companyId: p.companyId,
+          companyName: p.companyName || 'Sin Razón Social',
+          taxId: p.taxId || '',
+          items: [],
+        };
+      }
+      groups[key].items.push(p);
+    }
+    return Object.values(groups);
+  }, [parkings]);
+
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -123,6 +141,20 @@ function UsuariosAdmin() {
       const next = exists
         ? prev.parkingIds.filter((x) => x !== idNum)
         : [...prev.parkingIds, idNum];
+      return {
+        ...prev,
+        parkingIds: next,
+      };
+    });
+  };
+
+  const handleToggleCompanyGroupCreate = (companyItems) => {
+    const ids = companyItems.map((p) => Number(p.id));
+    setFormData((prev) => {
+      const allSelected = ids.every((id) => prev.parkingIds.includes(id));
+      const next = allSelected
+        ? prev.parkingIds.filter((id) => !ids.includes(id))
+        : Array.from(new Set([...prev.parkingIds, ...ids]));
       return {
         ...prev,
         parkingIds: next,
@@ -220,6 +252,16 @@ function UsuariosAdmin() {
     );
   };
 
+  const handleToggleCompanyGroupEdit = (companyItems) => {
+    const ids = companyItems.map((p) => Number(p.id));
+    setEditSelectedParkingIds((prev) => {
+      const allSelected = ids.every((id) => prev.includes(id));
+      return allSelected
+        ? prev.filter((id) => !ids.includes(id))
+        : Array.from(new Set([...prev, ...ids]));
+    });
+  };
+
   const handleSaveAdminParkings = async () => {
     if (!editTargetAdmin) return;
     if (editSelectedParkingIds.length === 0) {
@@ -291,25 +333,25 @@ function UsuariosAdmin() {
   if (loading) return <div className="p-8">Cargando usuarios...</div>;
 
   return (
-    <div className="max-w-6xl mx-auto mt-6 p-6 bg-white rounded-lg shadow-md">
-      <div className="flex justify-between items-center mb-6 border-b pb-4">
+    <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 sm:p-6 space-y-6">
+      <div className="flex justify-between items-center border-b border-slate-100 pb-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
             {isSuperAdmin
-              ? 'Gestión de Administradores de Sede'
-              : 'Gestión de Usuarios (Cajeros de Sede)'}
+              ? 'Gestión de Administradores (Por Razón Social o por Sede)'
+              : 'Gestión de Usuarios (Cajeros de mi Sede)'}
           </h2>
-          <p className="text-sm text-gray-500">
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             {isSuperAdmin
-              ? 'El Super Administrador administra exclusivamente las cuentas de rol Administrador (ADMIN) y sus sedes asignadas.'
+              ? 'Puede asignar un solo Administrador a todas las sedes de una Razón Social, o un Administrador individual por cada sede.'
               : 'Administre los cajeros operativos (CASHIER) asignados a su parqueadero actual.'}
           </p>
         </div>
       </div>
 
       {canCreate && (
-        <div className="mb-8 p-6 bg-slate-50 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-semibold mb-4 text-slate-700 flex items-center gap-2">
+        <div className="p-5 bg-slate-50 rounded-xl border border-slate-200">
+          <h3 className="text-base font-bold mb-4 text-slate-700 flex items-center gap-2">
             <UserIconElement className="w-5 h-5" />
             {isSuperAdmin
               ? 'Registrar Nuevo Administrador (ADMIN)'
@@ -317,30 +359,30 @@ function UsuariosAdmin() {
           </h3>
           <form
             onSubmit={handleCreateUser}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end"
+            className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end"
           >
             <div className="w-full">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
                 Nombre de Usuario
               </label>
               <input
                 name="username"
                 type="text"
-                className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full border border-slate-300 bg-white rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 value={formData.username}
                 onChange={handleInputChange}
-                placeholder={isSuperAdmin ? 'Ej: ADMIN.NORTE' : 'Ej: CAJERO.TURNO1'}
+                placeholder={isSuperAdmin ? 'Ej: ADMIN.METROPOLITANO' : 'Ej: CAJERO.TURNO1'}
               />
             </div>
 
             <div className="w-full">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
                 Contraseña Temporal
               </label>
               <input
                 name="password"
                 type="password"
-                className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full border border-slate-300 bg-white rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 value={formData.password}
                 onChange={handleInputChange}
                 placeholder="Mínimo 6 caracteres"
@@ -348,7 +390,7 @@ function UsuariosAdmin() {
             </div>
 
             <div className="w-full">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
                 Rol Asignado
               </label>
               <input
@@ -359,44 +401,94 @@ function UsuariosAdmin() {
                     ? 'Administrador de Sede (ADMIN)'
                     : 'Cajero Operativo (CASHIER)'
                 }
-                className="w-full border border-gray-200 bg-gray-100 text-gray-600 font-semibold rounded-lg p-2.5 cursor-not-allowed"
+                className="w-full border border-slate-200 bg-slate-100 text-slate-600 font-semibold text-sm rounded-lg p-2.5 cursor-not-allowed"
               />
             </div>
 
             {isSuperAdmin && (
-              <div className="w-full md:col-span-2 lg:col-span-3 mt-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sedes Administradas (Seleccione una o varias sedes)
-                </label>
-                <div className="flex flex-wrap gap-3">
-                  {parkings.map((p) => {
-                    const checked = formData.parkingIds.includes(p.id);
+              <div className="w-full md:col-span-3 mt-1 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold uppercase text-slate-600">
+                    Asignación de Sedes por Razón Social (Seleccione 1 sede o todas las sedes de la empresa)
+                  </label>
+                  <span className="text-xs font-bold text-blue-700">
+                    {formData.parkingIds.length} sede(s) seleccionada(s)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {parkingsByCompany.map((group) => {
+                    const allChecked = group.items.every((p) =>
+                      formData.parkingIds.includes(Number(p.id)),
+                    );
                     return (
-                      <label
-                        key={p.id}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm ${
-                          checked
-                            ? 'bg-blue-50 border-blue-500 text-blue-800 font-semibold'
-                            : 'bg-white border-gray-200 text-gray-700'
-                        }`}
+                      <div
+                        key={group.companyId}
+                        className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs"
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => handleToggleParkingCheck(p.id)}
-                        />
-                        <span>{p.name}</span>
-                      </label>
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2.5">
+                          <div>
+                            <div className="text-xs font-extrabold text-slate-800">
+                              🏛️ {group.companyName}
+                            </div>
+                            {group.taxId && (
+                              <div className="text-[11px] font-mono text-slate-400">
+                                NIT: {group.taxId}
+                              </div>
+                            )}
+                          </div>
+                          {group.items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleCompanyGroupCreate(group.items)
+                              }
+                              className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md transition-colors"
+                            >
+                              {allChecked
+                                ? 'Desmarcar todas'
+                                : 'Todas las sedes'}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {group.items.map((p) => {
+                            const checked = formData.parkingIds.includes(
+                              Number(p.id),
+                            );
+                            return (
+                              <label
+                                key={p.id}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-xs transition-all ${
+                                  checked
+                                    ? 'bg-blue-600 border-blue-600 text-white font-bold shadow-xs'
+                                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => handleToggleParkingCheck(p.id)}
+                                  className="sr-only"
+                                />
+                                <span>{checked ? '✓' : '📍'}</span>
+                                <span>{p.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               </div>
             )}
 
-            <div className="w-full md:col-span-2 lg:col-span-3 flex justify-end mt-2">
+            <div className="w-full md:col-span-3 flex justify-end pt-1">
               <button
                 type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-2.5 rounded-lg shadow-xs transition-colors flex items-center gap-2"
               >
                 <UserIconElement className="w-5 h-5" />
                 {isSuperAdmin ? 'Crear Administrador' : 'Crear Cajero'}
@@ -406,107 +498,104 @@ function UsuariosAdmin() {
         </div>
       )}
 
-      <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                ID
+              <th className="px-5 py-3 text-left font-bold">ID</th>
+              <th className="px-5 py-3 text-left font-bold">Usuario</th>
+              <th className="px-5 py-3 text-left font-bold">Rol</th>
+              <th className="px-5 py-3 text-left font-bold">
+                Razón Social / Sedes Asignadas
               </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Usuario
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Rol
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Sedes Asignadas
-              </th>
-              <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Estado
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Acciones
-              </th>
+              <th className="px-5 py-3 text-center font-bold">Estado</th>
+              <th className="px-5 py-3 text-right font-bold">Acciones</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white divide-y divide-slate-100">
             {users.map((u) => (
-              <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                <td className="px-5 py-3.5 whitespace-nowrap text-xs font-mono text-slate-500">
                   #{u.id}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <td className="px-5 py-3.5 whitespace-nowrap font-bold text-slate-900">
                   {u.username}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <td className="px-5 py-3.5 whitespace-nowrap">
                   <span
-                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    className={`px-2.5 py-0.5 inline-flex text-xs font-bold rounded-full ${
                       u.role === 'ADMIN'
                         ? 'bg-purple-100 text-purple-800'
-                        : 'bg-green-100 text-green-800'
+                        : 'bg-emerald-100 text-emerald-800'
                     }`}
                   >
                     {u.roleName || u.role}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-600">
+                <td className="px-5 py-3.5 text-slate-600">
                   {u.managedParkings && u.managedParkings.length > 0 ? (
-                    <div className="flex flex-wrap gap-1 items-center">
+                    <div className="flex flex-wrap gap-1.5 items-center">
                       {u.managedParkings.map((mp) => (
                         <span
                           key={mp.id}
-                          className="bg-slate-100 text-slate-700 text-xs px-2 py-0.5 rounded border border-slate-200"
+                          className="bg-slate-100 text-slate-800 text-xs px-2.5 py-1 rounded-md border border-slate-200 flex items-center gap-1"
                         >
-                          {mp.name}
+                          {mp.companyName && (
+                            <span className="text-slate-400 font-medium">
+                              {mp.companyName}:
+                            </span>
+                          )}
+                          <strong className="font-semibold">{mp.name}</strong>
                         </span>
                       ))}
                       {isSuperAdmin && canEdit && (
                         <button
                           type="button"
                           onClick={() => openEditParkingsModal(u)}
-                          className="ml-2 text-xs text-blue-600 hover:text-blue-800 font-semibold underline"
+                          className="ml-1 text-xs text-blue-600 hover:text-blue-800 font-bold underline"
                         >
                           Editar sedes
                         </button>
                       )}
                     </div>
                   ) : (
-                    <span className="text-gray-400 italic">Sin sede asignada</span>
+                    <span className="text-slate-400 italic text-xs">
+                      Sin sede asignada
+                    </span>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
+                <td className="px-5 py-3.5 whitespace-nowrap text-center">
                   <button
                     disabled={!canEdit || user.id === u.id}
                     onClick={() => handleToggleActive(u)}
                     className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
                       u.isActive
                         ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                        : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
                     }`}
                     title="Clic para activar/desactivar"
                   >
                     {u.isActive ? 'Activo' : 'Inactivo'}
                   </button>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <td className="px-5 py-3.5 whitespace-nowrap text-right font-medium">
                   {canEdit && user.id !== u.id && (
                     <button
                       onClick={() => openResetModal(u)}
-                      className="text-amber-700 hover:text-amber-900 bg-amber-50 p-2 rounded-full hover:bg-amber-100 transition-colors mr-2"
+                      className="text-amber-700 hover:text-amber-900 bg-amber-50 p-2 rounded-lg hover:bg-amber-100 transition-colors mr-1.5"
                       title="Restablecer contraseña"
                     >
-                      <KeyIconElement className="w-5 h-5" />
+                      <KeyIconElement className="w-4 h-4" />
                     </button>
                   )}
 
                   {canDelete && user.id !== u.id && (
                     <button
                       onClick={() => handleDeleteUser(u.id)}
-                      className="text-red-600 hover:text-red-900 bg-red-50 p-2 rounded-full hover:bg-red-100 transition-colors"
+                      className="text-red-600 hover:text-red-900 bg-red-50 p-2 rounded-lg hover:bg-red-100 transition-colors"
                       title="Eliminar usuario"
                     >
-                      <TrashIconElement className="w-5 h-5" />
+                      <TrashIconElement className="w-4 h-4" />
                     </button>
                   )}
                 </td>
@@ -514,7 +603,7 @@ function UsuariosAdmin() {
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                <td colSpan="6" className="px-6 py-8 text-center text-slate-400">
                   {isSuperAdmin
                     ? 'No hay Administradores registrados en el sistema.'
                     : 'No hay Cajeros registrados asociados a esta sede.'}
@@ -525,54 +614,89 @@ function UsuariosAdmin() {
         </table>
       </div>
 
-      {/* Modal para Editar Sedes de un ADMIN (exclusivo SUPER_ADMIN) */}
+      {/* Modal para Editar Sedes de un ADMIN agrupadas por Razón Social */}
       {editParkingsModalOpen && editTargetAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
             <div className="px-5 py-4 border-b bg-slate-50">
               <h3 className="text-lg font-bold text-slate-800">
                 Sedes Asignadas al Administrador
               </h3>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Administrador:{' '}
-                <span className="font-semibold text-slate-700">
+                <span className="font-bold text-slate-800">
                   {editTargetAdmin.username}
                 </span>
               </p>
             </div>
-            <div className="p-5 space-y-3">
-              <p className="text-xs text-gray-500">
-                Seleccione las sedes que este Administrador puede gestionar:
-              </p>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {parkings.map((p) => {
-                  const checked = editSelectedParkingIds.includes(Number(p.id));
-                  return (
-                    <label
-                      key={p.id}
-                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer text-sm ${
-                        checked
-                          ? 'bg-blue-50 border-blue-500 text-blue-900 font-semibold'
-                          : 'bg-white border-gray-200 text-gray-700'
-                      }`}
-                    >
+
+            <div className="p-5 space-y-3 max-h-[65vh] overflow-y-auto">
+              {parkingsByCompany.map((group) => {
+                const allChecked = group.items.every((p) =>
+                  editSelectedParkingIds.includes(Number(p.id)),
+                );
+                return (
+                  <div
+                    key={group.companyId}
+                    className="border border-slate-200 rounded-xl p-3.5 space-y-2"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <div>
-                        <div>{p.name}</div>
-                        <div className="text-xs text-gray-400 font-normal">
-                          {p.address}
+                        <div className="text-xs font-extrabold text-slate-800">
+                          🏛️ {group.companyName}
                         </div>
+                        {group.taxId && (
+                          <div className="text-[11px] font-mono text-slate-400">
+                            NIT: {group.taxId}
+                          </div>
+                        )}
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => handleToggleEditParking(p.id)}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                    </label>
-                  );
-                })}
-              </div>
+                      {group.items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCompanyGroupEdit(group.items)}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded"
+                        >
+                          {allChecked ? 'Desmarcar todas' : 'Seleccionar todas'}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {group.items.map((p) => {
+                        const checked = editSelectedParkingIds.includes(
+                          Number(p.id),
+                        );
+                        return (
+                          <label
+                            key={p.id}
+                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer text-xs ${
+                              checked
+                                ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold'
+                                : 'bg-white border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <div>
+                              <div>📍 {p.name}</div>
+                              <div className="text-[11px] text-slate-400 font-normal">
+                                {p.address}
+                              </div>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => handleToggleEditParking(p.id)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+
             <div className="px-5 py-4 border-t bg-slate-50 flex justify-end gap-2">
               <button
                 type="button"
@@ -581,7 +705,7 @@ function UsuariosAdmin() {
                   setEditTargetAdmin(null);
                 }}
                 disabled={editSaving}
-                className="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300 font-medium"
+                className="px-4 py-2 rounded-lg bg-slate-200 text-slate-800 hover:bg-slate-300 text-sm font-medium"
               >
                 Cancelar
               </button>
@@ -589,7 +713,7 @@ function UsuariosAdmin() {
                 type="button"
                 onClick={handleSaveAdminParkings}
                 disabled={editSaving}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold"
               >
                 {editSaving ? 'Guardando...' : 'Guardar Sedes'}
               </button>
