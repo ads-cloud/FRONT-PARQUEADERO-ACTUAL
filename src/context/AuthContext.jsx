@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext(null);
@@ -13,12 +13,12 @@ export const AuthProvider = ({ children }) => {
       const storedToken = localStorage.getItem('token');
       if (storedToken) {
         try {
-            axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-            const res = await axios.get('/api/auth/profile');
-            setUser(res.data);
+          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+          const res = await axios.get('/api/auth/profile');
+          setUser(res.data);
         } catch (error) {
-            console.error("Session expired or invalid");
-            logout();
+          console.error('Session expired or invalid');
+          logout();
         }
       }
       setLoading(false);
@@ -35,42 +35,41 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-        const res = await axios.post('/api/auth/login', { username, password });
-        const { access_token } = res.data; 
-        
-        localStorage.setItem('token', access_token);
-        axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      const res = await axios.post('/api/auth/login', { username, password });
+      const { accessToken } = res.data;
 
-        // Fetch user details immediately
-        const profileRes = await axios.get('/api/auth/profile');
-        setUser(profileRes.data);
-        setToken(access_token);
-        return {
-          success: true,
-          mustChangePassword: !!profileRes.data?.mustChangePassword,
-        };
+      localStorage.setItem('token', accessToken);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+
+      const profileRes = await axios.get('/api/auth/profile');
+      setUser(profileRes.data);
+      setToken(accessToken);
+      return {
+        success: true,
+        mustChangePassword: !!profileRes.data?.mustChangePassword,
+      };
     } catch (e) {
-        console.error(e);
-        return { success: false, mustChangePassword: false };
+      console.error(e);
+      return { success: false, mustChangePassword: false };
     }
   };
 
   const switchParking = async (targetParkingId) => {
-      try {
-          const res = await axios.post('/api/auth/switch-parking', { targetParkingId });
-          const { access_token } = res.data;
-          
-          localStorage.setItem('token', access_token);
-          axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-          
-          const profileRes = await axios.get('/api/auth/profile');
-          setUser(profileRes.data);
-          setToken(access_token);
-          return true;
-      } catch (error) {
-          console.error("Switch failed", error);
-          return false;
-      }
+    try {
+      const res = await axios.post('/api/auth/switch-parking', { targetParkingId });
+      const { accessToken } = res.data;
+
+      localStorage.setItem('token', accessToken);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+
+      const profileRes = await axios.get('/api/auth/profile');
+      setUser(profileRes.data);
+      setToken(accessToken);
+      return true;
+    } catch (error) {
+      console.error('Switch failed', error);
+      return false;
+    }
   };
 
   const logout = () => {
@@ -81,14 +80,47 @@ export const AuthProvider = ({ children }) => {
   };
 
   const changePassword = async (currentPassword, newPassword) => {
-    const res = await axios.post('/api/auth/change-password', { currentPassword, newPassword });
-    const { access_token } = res.data;
-    localStorage.setItem('token', access_token);
-    axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-    setToken(access_token);
+    const res = await axios.post('/api/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    const { accessToken } = res.data;
+    localStorage.setItem('token', accessToken);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+    setToken(accessToken);
     await refreshProfile();
     return true;
   };
+
+  const hasPermission = useCallback(
+    (moduleCode, action = 'view') => {
+      if (!user || !Array.isArray(user.permissions)) return false;
+      const perm = user.permissions.find((p) => p.moduleCode === moduleCode);
+      if (!perm) return false;
+
+      switch (action) {
+        case 'view':
+          return Boolean(perm.canView);
+        case 'create':
+          return Boolean(perm.canView && perm.canCreate);
+        case 'edit':
+          return Boolean(perm.canView && perm.canEdit);
+        case 'delete':
+          return Boolean(perm.canView && perm.canDelete);
+        default:
+          return Boolean(perm.canView);
+      }
+    },
+    [user],
+  );
+
+  const getDefaultRoute = useCallback(() => {
+    if (!user || !Array.isArray(user.permissions)) return '/dashboard';
+    const visible = user.permissions.filter((p) => p.canView);
+    const dashboardPerm = visible.find((p) => p.moduleCode === 'DASHBOARD');
+    if (dashboardPerm) return dashboardPerm.route || '/dashboard';
+    return visible[0]?.route || '/dashboard';
+  }, [user]);
 
   const value = {
     user,
@@ -98,15 +130,13 @@ export const AuthProvider = ({ children }) => {
     switchParking,
     changePassword,
     refreshProfile,
+    hasPermission,
+    getDefaultRoute,
     loading,
-    isAuth: !!user
+    isAuth: !!user,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => useContext(AuthContext);

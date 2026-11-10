@@ -16,20 +16,23 @@ export default function AdminPanel() {
 
   const fetchParkings = async () => {
     try {
-        const res = await axios.get('/api/parking/summary');
-        setParkings(res.data);
+      const res = await axios.get('/api/parking/summary');
+      setParkings(res.data || []);
     } catch (error) {
-        console.error(error);
-        toast.error('Error al cargar parqueaderos');
+      console.error(error);
+      toast.error('Error al cargar parqueaderos');
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
   const handleEnter = async (parkingId) => {
     const success = await switchParking(parkingId);
     if (success) {
-        navigate('/dashboard');
+      toast.success('Sede cambiada correctamente');
+      navigate('/dashboard');
+    } else {
+      toast.error('No se pudo cambiar de parqueadero');
     }
   };
 
@@ -37,80 +40,93 @@ export default function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-        <header className="mb-8 flex justify-between items-center max-w-7xl mx-auto">
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
-                <p className="text-gray-500">Bienvenido, {user?.username}</p>
+      <header className="mb-8 flex justify-between items-center max-w-7xl mx-auto">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Selección de Sede (Multi-Tenant)
+          </h1>
+          <p className="text-gray-500">Bienvenido, {user?.username}</p>
+        </div>
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="text-blue-600 hover:underline font-medium"
+        >
+          Ir a Dashboard Actual &rarr;
+        </button>
+      </header>
+
+      <main className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {parkings.map((p) => (
+          <div
+            key={p.id}
+            className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden"
+          >
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800">{p.name}</h3>
+                  <p className="text-sm text-gray-500 flex items-center gap-1">
+                    📍 {p.address}
+                  </p>
+                </div>
+                {Number(user?.parkingId) === Number(p.id) && (
+                  <span className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                    Activo
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-blue-50 p-3 rounded-lg text-center">
+                  <p className="text-xs text-blue-600 uppercase font-bold">
+                    Ocupación
+                  </p>
+                  <p className="text-2xl font-bold text-blue-900">
+                    {p.occupancy} / {p.totalCapacity || 100}
+                  </p>
+                </div>
+                <div className="bg-green-50 p-3 rounded-lg text-center">
+                  <p className="text-xs text-green-600 uppercase font-bold">
+                    Ingresos Hoy
+                  </p>
+                  <p className="text-xl font-bold text-green-900">
+                    ${Number(p.todayIncome || 0).toLocaleString('es-CO')}
+                  </p>
+                </div>
+                {p.expiringSubscriptionsCount > 0 && (
+                  <div className="col-span-2 bg-red-50 p-3 rounded-lg flex items-center justify-between text-red-800 border border-red-100">
+                    <span className="text-sm font-semibold flex items-center gap-2">
+                      ⚠️ Mensualidades por vencer
+                    </span>
+                    <span className="bg-red-200 text-red-900 text-xs font-bold px-2 py-1 rounded-full">
+                      {p.expiringSubscriptionsCount}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => handleEnter(p.id)}
+                className={`w-full py-2.5 px-4 rounded-lg font-medium transition-colors ${
+                  Number(user?.parkingId) === Number(p.id)
+                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {Number(user?.parkingId) === Number(p.id)
+                  ? 'Entrar a esta sede (Actual)'
+                  : 'Administrar / Operar Sede'}
+              </button>
             </div>
-            <button 
-                onClick={() => navigate('/dashboard')}
-                className="text-blue-600 hover:underline"
-            >
-                Ir a Dashboard Actual &rarr;
-            </button>
-        </header>
+          </div>
+        ))}
 
-        <main className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Cards */}
-            {parkings.map(p => (
-                <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden">
-                    <div className="p-6">
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <h3 className="text-xl font-bold text-gray-800">{p.nombre}</h3>
-                                <p className="text-sm text-gray-500 flex items-center gap-1">
-                                    📍 {p.direccion}
-                                </p>
-                            </div>
-                            {user?.parkingId === p.id && (
-                                <span className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
-                                    Activo
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div className="bg-blue-50 p-3 rounded-lg text-center">
-                                <p className="text-xs text-blue-600 uppercase font-bold">Ocupación</p>
-                                <p className="text-2xl font-bold text-blue-900">{p.ocupacion}</p>
-                            </div>
-                            <div className="bg-green-50 p-3 rounded-lg text-center">
-                                <p className="text-xs text-green-600 uppercase font-bold">Ingresos Hoy</p>
-                                <p className="text-xl font-bold text-green-900">${p.ingresosHoy?.toLocaleString('es-CO')}</p>
-                            </div>
-                            {p.vencimientosSoon > 0 && (
-                                <div className="col-span-2 bg-red-50 p-3 rounded-lg flex items-center justify-between text-red-800 border border-red-100">
-                                    <span className="text-sm font-semibold flex items-center gap-2">
-                                        ⚠️ Mensualidades por vencer
-                                    </span>
-                                    <span className="bg-red-200 text-red-900 text-xs font-bold px-2 py-1 rounded-full">
-                                        {p.vencimientosSoon}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-
-                        <button 
-                            onClick={() => handleEnter(p.id)}
-                            className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${
-                                user?.parkingId === p.id 
-                                ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                : 'bg-blue-600 text-white hover:bg-blue-700'
-                            }`}
-                        >
-                            {user?.parkingId === p.id ? 'Ya Estás Aquí' : 'Administrar'}
-                        </button>
-                    </div>
-                </div>
-            ))}
-
-            {/* Empty State */}
-            {parkings.length === 0 && (
-                <div className="col-span-full text-center py-12 text-gray-400 border-2 border-dashed rounded-xl">
-                    No tienes parqueaderos asignados.
-                </div>
-            )}
-        </main>
+        {parkings.length === 0 && (
+          <div className="col-span-full text-center py-12 text-gray-400 border-2 border-dashed rounded-xl">
+            No tienes parqueaderos asignados.
+          </div>
+        )}
+      </main>
     </div>
   );
 }
