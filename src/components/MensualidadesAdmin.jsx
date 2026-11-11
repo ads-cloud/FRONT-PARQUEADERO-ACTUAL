@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import Swal from 'sweetalert2';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
@@ -97,8 +98,18 @@ export default function MensualidadesAdmin() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Seguro que desea desactivar/eliminar esta mensualidad?'))
-      return;
+    const confirm = await Swal.fire({
+      title: '¿Desactivar / Eliminar Mensualidad?',
+      text: 'La suscripción mensual dejará de estar activa para este vehículo.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, desactivar',
+      cancelButtonText: 'Cancelar',
+    });
+    if (!confirm.isConfirmed) return;
+
     try {
       await axios.delete(`/api/subscriptions/${id}`);
       toast.success('Mensualidad desactivada correctamente');

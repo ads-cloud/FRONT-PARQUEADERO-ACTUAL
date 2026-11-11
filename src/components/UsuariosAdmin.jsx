@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import Swal from 'sweetalert2';
 import toast from 'react-hot-toast';
 
 const UserIconElement = ({ className }) => (
@@ -112,10 +113,11 @@ function UsuariosAdmin() {
     }
   }, [user, user?.parkingId]);
 
-  // Agrupamos las sedes por Razón Social para facilitar asignar 1 Admin por Razón Social o 1 Admin por Sede
+  // Agrupamos únicamente las sedes activas de Razones Sociales activas
   const parkingsByCompany = useMemo(() => {
     const groups = {};
     for (const p of parkings) {
+      if (p.isActive === false || p.companyIsActive === false) continue;
       const key = p.companyId || '0';
       if (!groups[key]) {
         groups[key] = {
@@ -227,7 +229,18 @@ function UsuariosAdmin() {
 
   const handleDeleteUser = async (id) => {
     if (!canDelete) return;
-    if (!window.confirm('¿Seguro que desea eliminar este usuario?')) return;
+    const confirm = await Swal.fire({
+      title: '¿Eliminar Usuario?',
+      text: 'Si el usuario posee historial operativo, será desactivado automáticamente para conservar la auditoría.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+    });
+    if (!confirm.isConfirmed) return;
+
     try {
       const res = await axios.delete(`/api/users/${id}`);
       toast.success(res.data?.message || 'Usuario eliminado');

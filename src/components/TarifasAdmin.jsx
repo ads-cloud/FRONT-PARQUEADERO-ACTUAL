@@ -98,11 +98,16 @@ export default function TarifasAdmin() {
         dayRate: Number(values.dayRate),
         monthRate: Number(values.monthRate),
         gracePeriodMinutes: Number(values.gracePeriodMinutes),
+        chargeByHour: Boolean(values.chargeByHour),
+        hourThresholdMinutes: Math.min(
+          60,
+          Math.max(1, Number(values.hourThresholdMinutes || 15)),
+        ),
         capacity: Number(values.capacity),
       });
       Swal.fire({
         title: '¡Actualizado!',
-        text: 'Tarifa y cupos guardados correctamente',
+        text: 'Tarifa, modalidad de cobro y cupos guardados correctamente',
         icon: 'success',
         timer: 1400,
         showConfirmButton: false,
@@ -270,6 +275,8 @@ function TariffCard({ title, emoji, vehicleTypeCode, current, onSave }) {
     dayRate: 0,
     monthRate: 0,
     gracePeriodMinutes: 0,
+    chargeByHour: false,
+    hourThresholdMinutes: 15,
     capacity: 30,
   });
 
@@ -281,16 +288,18 @@ function TariffCard({ title, emoji, vehicleTypeCode, current, onSave }) {
         dayRate: current.dayRate,
         monthRate: current.monthRate,
         gracePeriodMinutes: current.gracePeriodMinutes,
+        chargeByHour: Boolean(current.chargeByHour),
+        hourThresholdMinutes: current.hourThresholdMinutes ?? 15,
         capacity: current.capacity ?? 30,
       });
     }
   }, [current]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setValues((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
@@ -300,9 +309,22 @@ function TariffCard({ title, emoji, vehicleTypeCode, current, onSave }) {
         <h3 className="font-bold text-base text-slate-800 flex items-center gap-2">
           <span className="text-2xl">{emoji}</span> {title}
         </h3>
-        <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 bg-blue-100 text-blue-800 rounded-md">
-          {values.capacity} cupos
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md ${
+              values.chargeByHour
+                ? 'bg-indigo-100 text-indigo-800'
+                : 'bg-emerald-100 text-emerald-800'
+            }`}
+          >
+            {values.chargeByHour
+              ? `Hora / Fracción (${values.hourThresholdMinutes} min)`
+              : 'Por Minuto'}
+          </span>
+          <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 bg-blue-100 text-blue-800 rounded-md">
+            {values.capacity} cupos
+          </span>
+        </div>
       </div>
 
       <div className="p-5 space-y-4">
@@ -319,6 +341,73 @@ function TariffCard({ title, emoji, vehicleTypeCode, current, onSave }) {
             onChange={handleChange}
             className="w-full px-3 py-1.5 border border-blue-300 bg-white rounded-lg font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
           />
+        </div>
+
+        {/* Check de Cobro por Hora o Fracción + Minuto Umbral Parametrizable */}
+        <div
+          className={`p-3.5 rounded-xl border transition-all space-y-3 ${
+            values.chargeByHour
+              ? 'bg-indigo-50/70 border-indigo-200'
+              : 'bg-slate-50 border-slate-200'
+          }`}
+        >
+          <label className="flex items-center justify-between cursor-pointer select-none">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="chargeByHour"
+                checked={values.chargeByHour}
+                onChange={handleChange}
+                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              <span className="text-xs font-extrabold uppercase tracking-wide text-slate-800">
+                ⏱️ Cobrar por Hora o Fracción
+              </span>
+            </div>
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                values.chargeByHour
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              {values.chargeByHour ? 'Activado' : 'Por Minuto'}
+            </span>
+          </label>
+
+          {values.chargeByHour ? (
+            <div className="pt-2 border-t border-indigo-200/70 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-bold text-indigo-950">
+                  Minuto para cobrar la hora (1 a 60):
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    name="hourThresholdMinutes"
+                    value={values.hourThresholdMinutes}
+                    onChange={handleChange}
+                    className="w-20 px-2.5 py-1 border border-indigo-300 bg-white rounded-lg font-extrabold text-sm text-indigo-900 text-center focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <span className="text-xs font-bold text-indigo-800">min</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-indigo-800 leading-snug bg-white/80 p-2 rounded-lg border border-indigo-100">
+                En la 1ra hora y en cada hora siguiente: antes del minuto{' '}
+                <strong>{values.hourThresholdMinutes || 15}</strong> se cobran los
+                minutos; al completar{' '}
+                <strong>{values.hourThresholdMinutes || 15} min</strong> se cobra el{' '}
+                <strong>Valor Hora</strong> completo.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500">
+              Desactivado: Se liquida el tiempo total multiplicado por el{' '}
+              <strong>Valor Minuto</strong>.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
