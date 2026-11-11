@@ -4,12 +4,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import TicketEntry from './TicketEntry';
 import TicketExit from './TicketExit';
-
-const TYPE_ICONS = {
-  CAR: '🚗',
-  MOTORCYCLE: '🏍️',
-  BICYCLE: '🚲',
-};
+import { getVehicleIcon } from '../utils/vehicleValidation';
 
 export default function TicketOperations() {
   const { user, hasPermission } = useAuth();
@@ -150,7 +145,7 @@ export default function TicketOperations() {
                   : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}
             >
-              <span>{TYPE_ICONS[vt.code] || '🚗'}</span>
+              <span>{getVehicleIcon(vt.code, vt.name)}</span>
               <span className="font-semibold">{vt.name}:</span>
               <strong className="font-mono">
                 {vt.available} libres

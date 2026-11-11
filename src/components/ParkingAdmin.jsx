@@ -3,12 +3,7 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-
-const TYPE_ICONS = {
-  CAR: '🚗',
-  MOTORCYCLE: '🏍️',
-  BICYCLE: '🚲',
-};
+import { getVehicleIcon } from '../utils/vehicleValidation';
 
 export default function ParkingAdmin() {
   const { hasPermission } = useAuth();
@@ -1203,7 +1198,7 @@ export default function ParkingAdmin() {
                                     >
                                       <span className="text-xs font-semibold text-slate-600 flex items-center gap-1 truncate">
                                         <span>
-                                          {TYPE_ICONS[c.vehicleTypeCode] || '🚗'}
+                                          {getVehicleIcon(c.vehicleTypeCode, c.vehicleTypeName)}
                                         </span>
                                         <span className="truncate">
                                           {c.vehicleTypeName}
@@ -1415,7 +1410,7 @@ export default function ParkingAdmin() {
                               className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between text-xs text-slate-500"
                             >
                               <span>
-                                {TYPE_ICONS[c.vehicleTypeCode] || '🚗'}{' '}
+                                {getVehicleIcon(c.vehicleTypeCode, c.vehicleTypeName)}{' '}
                                 {c.vehicleTypeName}
                               </span>
                               <strong className="font-bold">{c.capacity}</strong>

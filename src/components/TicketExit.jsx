@@ -8,16 +8,10 @@ import {
   getVehicleType,
   isValidPlate,
   VEHICLE_TYPE_LABELS,
+  getVehicleIcon,
 } from '../utils/vehicleValidation';
 import { TicketExitPrint } from './TicketExitPrint';
 import { useAuth } from '../context/AuthContext';
-
-const getVehicleBadgeIcon = (code) => {
-  const c = (code || '').toUpperCase();
-  if (c.includes('MOTO')) return '🏍️';
-  if (c.includes('BICY') || c.includes('BICI')) return '🚲';
-  return '🚗';
-};
 
 export default function TicketExit({ onActiveCountChange }) {
   const { user, hasPermission } = useAuth();
@@ -31,9 +25,12 @@ export default function TicketExit({ onActiveCountChange }) {
   const [showActiveList, setShowActiveList] = useState(true);
   const [parking, setParking] = useState(null);
   const [lastPaidReceipt, setLastPaidReceipt] = useState(null);
+  const [calculating, setCalculating] = useState(false);
 
   const inputRef = useRef();
   const printRef = useRef();
+  const skipAutoSearchRef = useRef(false);
+  const searchInFlightRef = useRef(false);
 
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
@@ -42,17 +39,17 @@ export default function TicketExit({ onActiveCountChange }) {
 
   useEffect(() => {
     inputRef.current?.focus();
-    fetchActiveTickets();
+    fetchActiveTickets(false);
     fetchParkingInfo();
   }, [user?.parkingId]);
 
-  const fetchActiveTickets = async () => {
+  const fetchActiveTickets = async (notifyParent = false) => {
     try {
       setLoadingActive(true);
       const res = await axios.get('/api/tickets/active');
       const list = res.data || [];
       setActiveTickets(list);
-      if (typeof onActiveCountChange === 'function') {
+      if (notifyParent && typeof onActiveCountChange === 'function') {
         onActiveCountChange(list.length);
       }
     } catch (error) {
@@ -77,54 +74,95 @@ export default function TicketExit({ onActiveCountChange }) {
   }, [inputValue]);
 
   useEffect(() => {
-    if (inputValue.length === 6 && !info) {
+    if (skipAutoSearchRef.current) {
+      skipAutoSearchRef.current = false;
+      return;
+    }
+    if (
+      inputValue.length === 6 &&
+      info?.ticket?.licensePlate?.toUpperCase() !== inputValue.toUpperCase()
+    ) {
       const timeoutId = setTimeout(() => {
-        handleSearch();
+        handleSearch(undefined, inputValue);
       }, 300);
       return () => clearTimeout(timeoutId);
     }
-    if (inputValue.length < 5 && info) {
+    if (inputValue.length === 0 && info) {
       setInfo(null);
     }
   }, [inputValue]);
 
+  const handleSelectTicketFromTable = async (ticket) => {
+    if (!ticket?.id || searchInFlightRef.current) return;
+    skipAutoSearchRef.current = true;
+    setInputValue(ticket.licensePlate || '');
+
+    searchInFlightRef.current = true;
+    setCalculating(true);
+    try {
+      const res = await axios.get(`/api/tickets/${ticket.id}/calculate`);
+      setInfo(res.data);
+      toast.success(`Liquidación lista: ${ticket.licensePlate}`, {
+        id: 'ticket-search-toast',
+      });
+    } catch (err) {
+      const msg =
+        err.response?.data?.message || err.message || 'Error al liquidar el ticket';
+      toast.error(msg, { id: 'ticket-search-toast' });
+    } finally {
+      setCalculating(false);
+      searchInFlightRef.current = false;
+    }
+  };
+
   const handleSearch = async (e, forcedValue) => {
     if (e) e.preventDefault();
     const valueToSearch = (forcedValue || inputValue || '').trim().toUpperCase();
-    if (!valueToSearch) return;
+    if (!valueToSearch || searchInFlightRef.current) return;
 
-    if (info && info.ticket?.licensePlate === valueToSearch) return;
-
-    const toastId = toast.loading('Buscando ticket...');
-    setInfo(null);
+    skipAutoSearchRef.current = true;
+    searchInFlightRef.current = true;
+    setCalculating(true);
     let searchId = valueToSearch;
 
     try {
-      const isNumericTicketId = /^\d{1,5}$/.test(valueToSearch);
-      if (!isNumericTicketId && isValidPlate(valueToSearch)) {
-        try {
-          const resPlate = await axios.get(`/api/tickets/plate/${valueToSearch}`);
-          if (resPlate.data && resPlate.data.id) {
-            searchId = resPlate.data.id;
-          } else {
-            throw new Error('Vehículo no encontrado');
+      // Si ya está en la lista de tickets activos en memoria, usamos su ID directamente (evita 1 petición extra)
+      const cachedTicket = activeTickets.find(
+        (t) => t.licensePlate?.toUpperCase() === valueToSearch,
+      );
+
+      if (cachedTicket?.id) {
+        searchId = cachedTicket.id;
+      } else {
+        const isNumericTicketId = /^\d{1,5}$/.test(valueToSearch);
+        if (!isNumericTicketId && isValidPlate(valueToSearch)) {
+          try {
+            const resPlate = await axios.get(`/api/tickets/plate/${valueToSearch}`);
+            if (resPlate.data && resPlate.data.id) {
+              searchId = resPlate.data.id;
+            } else {
+              throw new Error('Vehículo no encontrado');
+            }
+          } catch (searchErr) {
+            const msg =
+              searchErr.response?.data?.message ||
+              'No se encontró un ticket activo para esta placa';
+            throw new Error(msg);
           }
-        } catch (searchErr) {
-          const msg =
-            searchErr.response?.data?.message ||
-            'No se encontró un ticket activo para esta placa';
-          throw new Error(msg);
         }
       }
 
       const res = await axios.get(`/api/tickets/${searchId}/calculate`);
       setInfo(res.data);
-      toast.success('Ticket encontrado', { id: toastId });
+      toast.success('Ticket encontrado', { id: 'ticket-search-toast' });
     } catch (err) {
-      let msg =
+      const msg =
         err.response?.data?.message || err.message || 'Error al buscar el ticket';
-      toast.error(msg, { id: toastId });
+      toast.error(msg, { id: 'ticket-search-toast' });
       setInfo(null);
+    } finally {
+      setCalculating(false);
+      searchInFlightRef.current = false;
     }
   };
 
@@ -148,10 +186,11 @@ export default function TicketExit({ onActiveCountChange }) {
       });
 
       toast.success('¡Salida registrada exitosamente!', { id: toastId });
+      skipAutoSearchRef.current = true;
       setInfo(null);
       setInputValue('');
       setDetectedType(null);
-      fetchActiveTickets();
+      fetchActiveTickets(true);
       inputRef.current?.focus();
       setTimeout(() => handlePrint(), 300);
     } catch (err) {
@@ -186,13 +225,14 @@ export default function TicketExit({ onActiveCountChange }) {
       await axios.post(`/api/tickets/${ticketId}/cancel`, { reason: reason.trim() });
       toast.success(`Ticket de ${plate} anulado`);
       if (info?.ticket?.id === ticketId) setInfo(null);
-      fetchActiveTickets();
+      fetchActiveTickets(true);
     } catch (err) {
       toast.error(err.response?.data?.message || 'No se pudo anular el ticket');
     }
   };
 
   const handleChange = (e) => {
+    skipAutoSearchRef.current = false;
     const val = cleanPlateInput(e.target.value);
     setInputValue(val);
   };
@@ -265,11 +305,18 @@ export default function TicketExit({ onActiveCountChange }) {
         {/* Panel Derecho: Resumen de Liquidación y Pago */}
         <div className="lg:col-span-8">
           {info ? (
-            <div className="bg-white rounded-2xl shadow-xl border-2 border-emerald-500 overflow-hidden">
+            <div
+              className={`bg-white rounded-2xl shadow-xl border-2 border-emerald-500 overflow-hidden transition-opacity duration-150 ${
+                calculating ? 'opacity-75' : 'opacity-100'
+              }`}
+            >
               <div className="bg-gradient-to-r from-emerald-600 to-green-600 px-6 py-4 text-white flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">
-                    {getVehicleBadgeIcon(info.ticket.vehicleTypeCode)}
+                    {getVehicleIcon(
+                      info.ticket.vehicleTypeCode,
+                      info.ticket.vehicleTypeName,
+                    )}
                   </span>
                   <div>
                     <span className="text-xs uppercase tracking-wider font-semibold text-emerald-100 block">
@@ -324,14 +371,18 @@ export default function TicketExit({ onActiveCountChange }) {
                   </div>
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
                     <span className="text-[11px] uppercase font-bold text-slate-400 block">
-                      {info.chargeByHour && Number(info.hourRate || 0) > 0
-                        ? `Tarifa Hora (min ${info.hourThresholdMinutes || 15}+)`
-                        : 'Tarifa / Min'}
+                      {info.chargeFlatDay && Number(info.dayRate || 0) > 0
+                        ? 'Tarifa Fija Día'
+                        : info.chargeByHour && Number(info.hourRate || 0) > 0
+                          ? `Tarifa Hora (min ${info.hourThresholdMinutes || 15}+)`
+                          : 'Tarifa / Min'}
                     </span>
                     <span className="font-mono font-bold text-slate-800 text-sm mt-0.5 block">
-                      {info.chargeByHour && Number(info.hourRate || 0) > 0
-                        ? `$${Number(info.hourRate || 0).toLocaleString('es-CO')} /h ($${Number(info.minuteRate || 0).toLocaleString('es-CO')}/m)`
-                        : `$${Number(info.minuteRate || 0).toLocaleString('es-CO')}`}
+                      {info.chargeFlatDay && Number(info.dayRate || 0) > 0
+                        ? `$${Number(info.dayRate || 0).toLocaleString('es-CO')} /día`
+                        : info.chargeByHour && Number(info.hourRate || 0) > 0
+                          ? `$${Number(info.hourRate || 0).toLocaleString('es-CO')} /h ($${Number(info.minuteRate || 0).toLocaleString('es-CO')}/m)`
+                          : `$${Number(info.minuteRate || 0).toLocaleString('es-CO')}`}
                     </span>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
@@ -438,7 +489,7 @@ export default function TicketExit({ onActiveCountChange }) {
               </div>
             )}
             <button
-              onClick={fetchActiveTickets}
+              onClick={() => fetchActiveTickets(true)}
               className="text-xs md:text-sm px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold border border-blue-200/60 transition-colors"
             >
               ↻ Actualizar
@@ -499,7 +550,12 @@ export default function TicketExit({ onActiveCountChange }) {
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-700">
                         <span className="inline-flex items-center gap-1.5">
-                          <span>{getVehicleBadgeIcon(ticket.vehicleTypeCode)}</span>
+                          <span>
+                            {getVehicleIcon(
+                              ticket.vehicleTypeCode,
+                              ticket.vehicleTypeName,
+                            )}
+                          </span>
                           <span>{ticket.vehicleTypeName || ticket.vehicleTypeCode}</span>
                         </span>
                       </td>
@@ -519,13 +575,10 @@ export default function TicketExit({ onActiveCountChange }) {
                       </td>
                       <td className="py-3 px-6 text-right space-x-2 whitespace-nowrap">
                         <button
-                          onClick={() => {
-                            setInputValue(ticket.licensePlate);
-                            setInfo(null);
-                            handleSearch(undefined, ticket.licensePlate);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
-                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-bold text-xs shadow-sm transition-colors"
+                          type="button"
+                          disabled={calculating}
+                          onClick={() => handleSelectTicketFromTable(ticket)}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 font-bold text-xs shadow-sm transition-colors cursor-pointer"
                         >
                           💰 Cobrar / Salida
                         </button>
