@@ -72,6 +72,12 @@ export default function Dashboard() {
             section: 'OPERATION',
           });
         }
+      } else if (perm.moduleCode === 'CASH_CLOSING' && user?.role === 'ADMIN') {
+        items.push({
+          ...perm,
+          moduleName: 'Caja y Cierres',
+          matchRoutes: [perm.route],
+        });
       } else {
         items.push({
           ...perm,

@@ -49,8 +49,12 @@ export default function HomeStats() {
   }
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isAdminOrSuper = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
   const quickModules = (user?.permissions || []).filter(
-    (p) => p.canView && p.moduleCode !== 'DASHBOARD',
+    (p) =>
+      p.canView &&
+      p.moduleCode !== 'DASHBOARD' &&
+      !(isAdminOrSuper && p.moduleCode === 'CASH_CLOSING'),
   );
 
   const renderIncomeBreakdown = (byType) => {

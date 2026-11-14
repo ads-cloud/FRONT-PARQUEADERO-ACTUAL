@@ -299,13 +299,14 @@ export default function CajaCierre() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-          {/* BOTÓN PROMINENTE DE ENTREGA DE TURNO */}
-          <button
-            onClick={openHandoverModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm rounded-xl shadow-md transform active:scale-95 transition-all"
-          >
-            🤝 Entrega y Relevo de Turno
-          </button>
+          {!isSupervisor && (
+            <button
+              onClick={openHandoverModal}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm rounded-xl shadow-md transform active:scale-95 transition-all"
+            >
+              🤝 Entrega y Relevo de Turno
+            </button>
+          )}
 
           {isSupervisor && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
@@ -359,21 +360,6 @@ export default function CajaCierre() {
             <span className="text-xs bg-indigo-50 text-indigo-700 font-bold py-0.5 px-2 rounded-full">
               {handoversHistory.length}
             </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('personal')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'personal'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            💼 Mi Caja Personal
-            {hasPendingPersonalMovements && (
-              <span className="text-xs bg-green-100 text-green-800 font-bold py-0.5 px-2 rounded-full">
-                ${Number(personalData.totalCollected || 0).toLocaleString('es-CO')}
-              </span>
-            )}
           </button>
         </div>
       )}
@@ -782,9 +768,9 @@ export default function CajaCierre() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: MI CAJA PERSONAL                                                   */}
+      {/* CIERRE DE CAJA OPERATIVO (Solo para Cajeros)                               */}
       {/* ========================================================================= */}
-      {(activeTab === 'personal' || !isSupervisor) && (
+      {!isSupervisor && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-xl shadow-xs border border-gray-100">
             <div className="flex justify-between items-center mb-4">
