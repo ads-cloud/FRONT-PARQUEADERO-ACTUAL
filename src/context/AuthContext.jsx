@@ -86,6 +86,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const setSessionFromHandover = async (authData) => {
+    const { accessToken } = authData;
+    localStorage.setItem('token', accessToken);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+    setToken(accessToken);
+    const profileRes = await axios.get('/api/auth/profile');
+    setUser(profileRes.data);
+    return profileRes.data;
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
@@ -138,6 +148,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     switchParking,
+    setSessionFromHandover,
     changePassword,
     refreshProfile,
     hasPermission,

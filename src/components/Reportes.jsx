@@ -3,7 +3,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 export default function Reportes() {
-  const [activeReportTab, setActiveReportTab] = useState('income'); // 'income' | 'cash-closings'
+  const [activeReportTab, setActiveReportTab] = useState('income'); // 'income' | 'cash-closings' | 'handovers'
 
   const [startDate, setStartDate] = useState(
     new Date().toISOString().split('T')[0],
@@ -21,6 +21,10 @@ export default function Reportes() {
   const [loadingClosings, setLoadingClosings] = useState(false);
   const [cashiersList, setCashiersList] = useState([]);
   const [selectedCashierId, setSelectedCashierId] = useState('');
+
+  // Handovers Report state
+  const [handoversReport, setHandoversReport] = useState([]);
+  const [loadingHandovers, setLoadingHandovers] = useState(false);
 
   // Detail Modal for closings
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -81,6 +85,27 @@ export default function Reportes() {
     }
   };
 
+  const generateHandoversReport = async () => {
+    if (!startDate || !endDate) {
+      toast.error('Seleccione ambas fechas');
+      return;
+    }
+    setLoadingHandovers(true);
+    const toastId = toast.loading('Consultando actas de entrega...');
+    try {
+      const res = await axios.get('/api/cash-closings/handovers-history', {
+        params: { startDate, endDate },
+      });
+      setHandoversReport(res.data || []);
+      toast.success('Actas de entrega cargadas', { id: toastId });
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al cargar actas de entrega', { id: toastId });
+    } finally {
+      setLoadingHandovers(false);
+    }
+  };
+
   const handleViewDetail = async (closingId) => {
     try {
       setLoadingDetail(true);
@@ -113,16 +138,16 @@ export default function Reportes() {
             Módulo de Reportes de Sede
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            Informes consolidados de ingresos operacionales y auditoría de cierres de caja por usuario.
+            Informes consolidados de ingresos operacionales, auditoría de cierres y actas de entrega de turno.
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 space-x-2 bg-white px-4 pt-3 rounded-t-xl shadow-xs">
+      <div className="flex border-b border-gray-200 space-x-2 bg-white px-4 pt-3 rounded-t-xl shadow-xs overflow-x-auto">
         <button
           onClick={() => setActiveReportTab('income')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
             activeReportTab === 'income'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -135,13 +160,26 @@ export default function Reportes() {
             setActiveReportTab('cash-closings');
             if (closingsReport.length === 0) generateClosingsReport();
           }}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
             activeReportTab === 'cash-closings'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           }`}
         >
           🧾 Cierres de Caja por Usuario
+        </button>
+        <button
+          onClick={() => {
+            setActiveReportTab('handovers');
+            if (handoversReport.length === 0) generateHandoversReport();
+          }}
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            activeReportTab === 'handovers'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          🤝 Actas de Entrega de Turno
         </button>
       </div>
 
@@ -441,7 +479,127 @@ export default function Reportes() {
         </div>
       )}
 
-      {/* Detail Modal */}
+      {/* ========================================================================= */}
+      {/* TAB 3: ACTAS DE ENTREGA DE TURNO (HANDOVERS)                              */}
+      {/* ========================================================================= */}
+      {activeReportTab === 'handovers' && (
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-xl shadow-xs border border-gray-100 flex flex-wrap gap-4 items-end">
+            <div>
+              <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                Fecha Inicio
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-blue-500 p-2 text-sm border"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                Fecha Fin
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-blue-500 p-2 text-sm border"
+              />
+            </div>
+            <button
+              onClick={generateHandoversReport}
+              disabled={loadingHandovers}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm shadow-sm disabled:opacity-50 transition-colors"
+            >
+              {loadingHandovers ? 'Consultando...' : 'Consultar Actas de Relevo'}
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800 text-base">
+                Actas de Entrega y Relevo de Turno Registradas
+              </h3>
+              <span className="text-xs text-gray-500">
+                {handoversReport.length} acta(s) encontradas
+              </span>
+            </div>
+
+            {handoversReport.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left text-gray-600">
+                  <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-5 py-3">Fecha y Hora</th>
+                      <th className="px-5 py-3">Cajero Saliente</th>
+                      <th className="px-5 py-3">Cajero Entrante</th>
+                      <th className="px-5 py-3 text-right">Base Entregada</th>
+                      <th className="px-5 py-3 text-right">Cobros Relevo</th>
+                      <th className="px-5 py-3 text-right">Total Turno</th>
+                      <th className="px-5 py-3 text-right">Efectivo Físico</th>
+                      <th className="px-5 py-3 text-center">Diferencia</th>
+                      <th className="px-5 py-3 text-center">Notas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {handoversReport.map((h) => (
+                      <tr key={h.id} className="hover:bg-indigo-50/30 transition-colors">
+                        <td className="px-5 py-3.5 whitespace-nowrap font-medium text-gray-900">
+                          {new Date(h.handoverAt).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 font-bold text-gray-800">
+                          👤 {h.outgoingCashierUsername}
+                        </td>
+                        <td className="px-5 py-3.5 font-bold text-blue-700">
+                          👤 {h.incomingCashierUsername}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-medium">
+                          ${Number(h.baseAmount || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-bold text-emerald-700">
+                          ${Number(h.pendingClosedAmount || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-bold text-gray-900">
+                          ${Number(h.totalShiftAmount || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-extrabold text-blue-900">
+                          ${Number(h.physicalCashDelivered || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          {Number(h.difference || 0) === 0 ? (
+                            <span className="inline-block px-2 py-0.5 bg-green-100 text-green-800 text-xs font-bold rounded">
+                              Cuadrado ($0)
+                            </span>
+                          ) : Number(h.difference || 0) > 0 ? (
+                            <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded">
+                              +${Number(h.difference).toLocaleString('es-CO')}
+                            </span>
+                          ) : (
+                            <span className="inline-block px-2 py-0.5 bg-red-100 text-red-800 text-xs font-bold rounded">
+                              -${Math.abs(Number(h.difference)).toLocaleString('es-CO')}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-center text-xs text-gray-500 max-w-[160px] truncate">
+                          {h.notes || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <span className="text-3xl block mb-2">🤝</span>
+                No hay actas de entrega de turno registradas en este periodo.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal for cash closing */}
       {detailModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-3xl w-full my-8 max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">

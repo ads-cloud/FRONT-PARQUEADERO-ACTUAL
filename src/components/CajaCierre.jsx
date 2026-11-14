@@ -4,10 +4,10 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
 export default function CajaCierre() {
-  const { user } = useAuth();
+  const { user, setSessionFromHandover } = useAuth();
   const isSupervisor = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 
-  // Active sub-tab for Admin: 'history' (Historial de cierres), 'open-shifts' (Turnos en curso), 'personal' (Mi caja)
+  // Active sub-tab for Admin: 'history' | 'open-shifts' | 'handovers' | 'personal'
   const [activeTab, setActiveTab] = useState(isSupervisor ? 'history' : 'personal');
 
   // Personal shift data
@@ -31,10 +31,33 @@ export default function CajaCierre() {
   // Open shifts data (for supervisors)
   const [openShifts, setOpenShifts] = useState([]);
 
-  // Detail Modal
+  // Handovers history (for supervisors)
+  const [handoversHistory, setHandoversHistory] = useState([]);
+
+  // Detail Modal for standard cash closing
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedClosingDetail, setSelectedClosingDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+
+  // Handover Modal State
+  const [handoverModalOpen, setHandoverModalOpen] = useState(false);
+  const [handoverStatus, setHandoverStatus] = useState(null);
+  const [loadingHandoverStatus, setLoadingHandoverStatus] = useState(false);
+  const [submittingHandover, setSubmittingHandover] = useState(false);
+
+  // Handover Form Data
+  const [handoverForm, setHandoverForm] = useState({
+    incomingUsername: '',
+    incomingPassword: '',
+    outgoingPassword: '',
+    baseAmount: 100000,
+    physicalCashDelivered: '',
+    notes: '',
+  });
+
+  // Completed Handover Receipt Modal
+  const [completedHandover, setCompletedHandover] = useState(null);
+  const [handoverReceiptModalOpen, setHandoverReceiptModalOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -58,6 +81,7 @@ export default function CajaCierre() {
       if (isSupervisor) {
         promises.push(axios.get('/api/cash-closings/open-shifts'));
         promises.push(axios.get('/api/users').catch(() => ({ data: [] })));
+        promises.push(axios.get('/api/cash-closings/handovers-history').catch(() => ({ data: [] })));
       }
 
       const results = await Promise.all(promises);
@@ -67,6 +91,7 @@ export default function CajaCierre() {
       if (isSupervisor) {
         setOpenShifts(results[2]?.data || []);
         setCashiersList(results[3]?.data || []);
+        setHandoversHistory(results[4]?.data || []);
       }
     } catch (error) {
       console.error(error);
@@ -111,7 +136,7 @@ export default function CajaCierre() {
     }
   };
 
-  // View detail modal
+  // View closing detail modal
   const handleViewDetail = async (closingId) => {
     try {
       setLoadingDetail(true);
@@ -141,6 +166,77 @@ export default function CajaCierre() {
       console.error(error);
       const msg = error.response?.data?.message || 'Error al cerrar caja';
       toast.error(msg, { id: toastId });
+    }
+  };
+
+  // =========================================================================
+  // HANDOVER / ENTREGA DE TURNO FLOW
+  // =========================================================================
+  const openHandoverModal = async () => {
+    try {
+      setLoadingHandoverStatus(true);
+      setHandoverModalOpen(true);
+      const res = await axios.get('/api/cash-closings/handover-status');
+      setHandoverStatus(res.data);
+
+      const defaultBase = res.data?.defaultBaseAmount || 100000;
+      const pendingTotal = res.data?.pendingMovements?.total || 0;
+      const suggestedCash = defaultBase + pendingTotal;
+
+      setHandoverForm({
+        incomingUsername: '',
+        incomingPassword: '',
+        outgoingPassword: '',
+        baseAmount: defaultBase,
+        physicalCashDelivered: suggestedCash,
+        notes: '',
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error('Error al consultar estado previo de entrega de turno');
+      setHandoverModalOpen(false);
+    } finally {
+      setLoadingHandoverStatus(false);
+    }
+  };
+
+  const handleExecuteHandover = async (e) => {
+    e.preventDefault();
+    if (!handoverForm.incomingUsername || !handoverForm.incomingPassword) {
+      toast.error('Ingrese el usuario y la contraseña del cajero entrante');
+      return;
+    }
+
+    try {
+      setSubmittingHandover(true);
+      const toastId = toast.loading('Procesando entrega y relevo de turno...');
+
+      const res = await axios.post('/api/cash-closings/handover', {
+        incomingUsername: handoverForm.incomingUsername,
+        incomingPassword: handoverForm.incomingPassword,
+        outgoingPassword: handoverForm.outgoingPassword || undefined,
+        baseAmount: Number(handoverForm.baseAmount || 0),
+        physicalCashDelivered: Number(handoverForm.physicalCashDelivered || 0),
+        notes: handoverForm.notes || undefined,
+      });
+
+      toast.success(res.data.message || 'Turno entregado exitosamente', { id: toastId });
+      setHandoverModalOpen(false);
+
+      // Save handover details for printable receipt
+      setCompletedHandover(res.data.handover);
+      setHandoverReceiptModalOpen(true);
+
+      // Switch active session to the incoming cashier!
+      if (res.data.auth && setSessionFromHandover) {
+        await setSessionFromHandover(res.data.auth);
+      }
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.message || 'Error al realizar entrega de turno';
+      toast.error(msg);
+    } finally {
+      setSubmittingHandover(false);
     }
   };
 
@@ -178,6 +274,12 @@ export default function CajaCierre() {
   const hasPendingPersonalMovements =
     personalData.totalTickets > 0 || personalData.totalSubscriptions > 0;
 
+  // Real-time calculation of handover difference
+  const pendingToClose = handoverStatus?.pendingMovements?.total || 0;
+  const expectedPhysical = Number(handoverForm.baseAmount || 0) + pendingToClose;
+  const countedPhysical = Number(handoverForm.physicalCashDelivered || 0);
+  const handoverDiff = countedPhysical - expectedPhysical;
+
   return (
     <div className="max-w-6xl mx-auto p-4 space-y-6 relative">
       {/* Header with Title and Mode indicator */}
@@ -191,38 +293,48 @@ export default function CajaCierre() {
           </div>
           <p className="text-sm text-gray-500 mt-1">
             {isSupervisor
-              ? 'Auditoría integral de turnos y cierres de caja realizados por los cajeros de la sede.'
-              : 'Consolidación de tickets y mensualidades cobradas en tu turno de trabajo actual.'}
+              ? 'Auditoría integral de turnos, actas de entrega y cierres de caja por cajero en la sede.'
+              : 'Gestión de tu turno actual, entrega de puesto a relevo y consolidación de cobros.'}
           </p>
         </div>
 
-        {isSupervisor && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 self-start md:self-auto">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-            Rol Administrador de Sede
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {/* BOTÓN PROMINENTE DE ENTREGA DE TURNO */}
+          <button
+            onClick={openHandoverModal}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm rounded-xl shadow-md transform active:scale-95 transition-all"
+          >
+            🤝 Entrega y Relevo de Turno
+          </button>
+
+          {isSupervisor && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+              Admin de Sede
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Tabs navigation for Supervisors */}
       {isSupervisor && (
-        <div className="flex border-b border-gray-200 space-x-2 bg-white px-4 pt-3 rounded-t-xl shadow-xs">
+        <div className="flex border-b border-gray-200 space-x-2 bg-white px-4 pt-3 rounded-t-xl shadow-xs overflow-x-auto">
           <button
             onClick={() => setActiveTab('history')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
               activeTab === 'history'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            📋 Cierres Realizados por Usuario
+            📋 Cierres por Usuario
             <span className="text-xs bg-gray-100 text-gray-700 py-0.5 px-2 rounded-full">
               {history.length}
             </span>
           </button>
           <button
             onClick={() => setActiveTab('open-shifts')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
               activeTab === 'open-shifts'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -236,8 +348,21 @@ export default function CajaCierre() {
             )}
           </button>
           <button
+            onClick={() => setActiveTab('handovers')}
+            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+              activeTab === 'handovers'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            🤝 Actas de Entrega de Turno
+            <span className="text-xs bg-indigo-50 text-indigo-700 font-bold py-0.5 px-2 rounded-full">
+              {handoversHistory.length}
+            </span>
+          </button>
+          <button
             onClick={() => setActiveTab('personal')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
               activeTab === 'personal'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -254,9 +379,9 @@ export default function CajaCierre() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 1: HISTORIAL DE CIERRES POR USUARIO (Auditoría para Administrador)     */}
+      {/* TAB 1: HISTORIAL DE CIERRES POR USUARIO                                   */}
       {/* ========================================================================= */}
-      {activeTab === 'history' && (
+      {activeTab === 'history' && isSupervisor && (
         <div className="space-y-6">
           {/* Filter Bar */}
           <div className="bg-white p-5 rounded-xl shadow-xs border border-gray-100">
@@ -322,7 +447,7 @@ export default function CajaCierre() {
             </form>
           </div>
 
-          {/* Metric Cards of Filtered Closings */}
+          {/* Metric Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-blue-50/80 p-4 rounded-xl border border-blue-100">
               <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
@@ -375,7 +500,7 @@ export default function CajaCierre() {
             </div>
           </div>
 
-          {/* Closings Table */}
+          {/* Table */}
           <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-gray-800 text-base">
@@ -392,7 +517,7 @@ export default function CajaCierre() {
                   <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-5 py-3">Fecha y Hora</th>
-                      <th className="px-5 py-3">Cajero (Usuario)</th>
+                      <th className="px-5 py-3">Cajero</th>
                       <th className="px-5 py-3 text-center">Tickets</th>
                       <th className="px-5 py-3 text-center">Mensualidades</th>
                       <th className="px-5 py-3 text-right">Total Recaudado</th>
@@ -428,7 +553,7 @@ export default function CajaCierre() {
                         <td className="px-5 py-3.5 text-right font-extrabold text-blue-700 text-base whitespace-nowrap">
                           ${Number(c.totalCollected || 0).toLocaleString('es-CO')}
                         </td>
-                        <td className="px-5 py-3.5 text-center max-w-[180px] truncate text-xs text-gray-500">
+                        <td className="px-5 py-3.5 text-center max-w-[200px] truncate text-xs text-gray-500">
                           {c.notes || '-'}
                         </td>
                         <td className="px-5 py-3.5 text-center">
@@ -455,7 +580,7 @@ export default function CajaCierre() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: TURNOS ABIERTOS EN TIEMPO REAL (Supervisión de Cajas Abiertas)      */}
+      {/* TAB 2: TURNOS ABIERTOS EN TIEMPO REAL                                     */}
       {/* ========================================================================= */}
       {activeTab === 'open-shifts' && isSupervisor && (
         <div className="space-y-6">
@@ -504,7 +629,7 @@ export default function CajaCierre() {
                     <div className="grid grid-cols-2 gap-3 mb-4">
                       <div className="bg-gray-50 p-2.5 rounded-lg text-center">
                         <p className="text-[11px] text-gray-500 font-medium">
-                          Tickets Cobrados ({shift.totalTickets})
+                          Tickets ({shift.totalTickets})
                         </p>
                         <p className="text-sm font-bold text-emerald-700">
                           ${Number(shift.ticketsAmount || 0).toLocaleString('es-CO')}
@@ -564,14 +689,115 @@ export default function CajaCierre() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: MI CAJA PERSONAL (Para Cajero o Administrador operando directamente) */}
+      {/* TAB 3: ACTAS DE ENTREGA DE TURNO (HISTORIAL DE RELEVOS)                  */}
       {/* ========================================================================= */}
-      {activeTab === 'personal' && (
+      {activeTab === 'handovers' && isSupervisor && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-gray-800 text-base">
+                  Actas Digitales de Entrega y Relevo de Turno
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Auditoría de traspaso de caja entre cajeros, bases de efectivo y diferencias físicas.
+                </p>
+              </div>
+              <span className="text-xs font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-100">
+                {handoversHistory.length} relevo(s) registrados
+              </span>
+            </div>
+
+            {handoversHistory.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left text-gray-600">
+                  <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-5 py-3">Fecha y Hora</th>
+                      <th className="px-5 py-3">Cajero Saliente</th>
+                      <th className="px-5 py-3">Cajero Entrante</th>
+                      <th className="px-5 py-3 text-right">Base Entregada</th>
+                      <th className="px-5 py-3 text-right">Cobros Relevo</th>
+                      <th className="px-5 py-3 text-right">Total Turno</th>
+                      <th className="px-5 py-3 text-right">Efectivo Físico</th>
+                      <th className="px-5 py-3 text-center">Diferencia</th>
+                      <th className="px-5 py-3 text-center">Notas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {handoversHistory.map((h) => (
+                      <tr key={h.id} className="hover:bg-indigo-50/30 transition-colors">
+                        <td className="px-5 py-3.5 whitespace-nowrap font-medium text-gray-900">
+                          {new Date(h.handoverAt).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 font-bold text-gray-800">
+                          👤 {h.outgoingCashierUsername}
+                        </td>
+                        <td className="px-5 py-3.5 font-bold text-blue-700">
+                          👤 {h.incomingCashierUsername}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-medium">
+                          ${Number(h.baseAmount || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-bold text-emerald-700">
+                          ${Number(h.pendingClosedAmount || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-bold text-gray-900">
+                          ${Number(h.totalShiftAmount || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-extrabold text-blue-900">
+                          ${Number(h.physicalCashDelivered || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          {Number(h.difference || 0) === 0 ? (
+                            <span className="inline-block px-2 py-0.5 bg-green-100 text-green-800 text-xs font-bold rounded">
+                              Cuadrado ($0)
+                            </span>
+                          ) : Number(h.difference || 0) > 0 ? (
+                            <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded">
+                              +${Number(h.difference).toLocaleString('es-CO')} (Sobrante)
+                            </span>
+                          ) : (
+                            <span className="inline-block px-2 py-0.5 bg-red-100 text-red-800 text-xs font-bold rounded">
+                              -${Math.abs(Number(h.difference)).toLocaleString('es-CO')} (Faltante)
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-center text-xs text-gray-500 max-w-[160px] truncate">
+                          {h.notes || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <span className="text-3xl block mb-2">🤝</span>
+                No hay actas de entrega de turno registradas aún en esta sede.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: MI CAJA PERSONAL                                                   */}
+      {/* ========================================================================= */}
+      {(activeTab === 'personal' || !isSupervisor) && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-xl shadow-xs border border-gray-100">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">
-              Mi Turno de Caja ({user?.username})
-            </h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800">
+                Mi Turno de Caja ({user?.username})
+              </h3>
+              <button
+                onClick={openHandoverModal}
+                className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-lg border border-blue-200 transition-colors flex items-center gap-1.5"
+              >
+                🤝 Entregar Turno
+              </button>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div className="bg-blue-50 p-5 rounded-lg border border-blue-100 text-center">
@@ -614,16 +840,32 @@ export default function CajaCierre() {
                     className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-green-500 focus:outline-hidden"
                   />
                 </div>
-                <button
-                  onClick={() => setShowConfirm(true)}
-                  className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg transform active:scale-95 transition-all text-xl"
-                >
-                  CERRAR CAJA Y GENERAR REPORTE
-                </button>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => setShowConfirm(true)}
+                    className="flex-1 py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-md transform active:scale-95 transition-all text-lg"
+                  >
+                    CERRAR CAJA Y GENERAR REPORTE
+                  </button>
+                  <button
+                    onClick={openHandoverModal}
+                    className="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transform active:scale-95 transition-all text-lg flex items-center justify-center gap-2"
+                  >
+                    🤝 ENTREGAR TURNO A REEMPLAZO
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center font-medium border border-yellow-200">
-                No tienes movimientos pendientes para cerrar en tu turno.
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
+                <span className="font-medium text-sm">
+                  No tienes movimientos pendientes para cerrar en tu turno.
+                </span>
+                <button
+                  onClick={openHandoverModal}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors whitespace-nowrap"
+                >
+                  🤝 Entregar Turno al Siguiente Cajero
+                </button>
               </div>
             )}
           </div>
@@ -764,7 +1006,382 @@ export default function CajaCierre() {
         </div>
       )}
 
-      {/* Confirmation Modal */}
+      {/* ========================================================================= */}
+      {/* MODAL: ENTREGA Y RELEVO DE TURNO (HANDOVER)                               */}
+      {/* ========================================================================= */}
+      {handoverModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full my-8 max-h-[95vh] flex flex-col animate-in fade-in zoom-in duration-200">
+            {/* Header */}
+            <div className="flex justify-between items-start border-b pb-4 mb-4">
+              <div>
+                <span className="text-xs font-bold uppercase text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded border border-indigo-200 inline-block mb-1">
+                  🤝 Acta de Entrega y Relevo de Turno
+                </span>
+                <h3 className="text-xl font-bold text-gray-800">
+                  Transferencia de Turno de Caja
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Cajero Saliente: <strong className="text-gray-800">{user?.username}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setHandoverModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none p-1"
+              >
+                &times;
+              </button>
+            </div>
+
+            {loadingHandoverStatus ? (
+              <div className="p-8 text-center text-gray-500">Cargando estado del turno...</div>
+            ) : handoverStatus ? (
+              <form onSubmit={handleExecuteHandover} className="overflow-y-auto flex-1 space-y-5 pr-1">
+                {/* 1. Alerta de movimientos pendientes / cobros posteriores */}
+                {handoverStatus.hasPendingMovements ? (
+                  <div className="bg-amber-50 border border-amber-300 p-4 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">⚠️</span>
+                      <div>
+                        <h4 className="font-bold text-amber-900 text-sm">
+                          Cobros posteriores pendientes de consolidar ({handoverStatus.pendingMovements.ticketsCount + handoverStatus.pendingMovements.subscriptionsCount})
+                        </h4>
+                        <p className="text-xs text-amber-800 mt-1">
+                          Tienes{' '}
+                          <strong className="font-extrabold text-amber-950">
+                            ${Number(handoverStatus.pendingMovements.total).toLocaleString('es-CO')}
+                          </strong>{' '}
+                          cobrados en tu sesión. Al confirmar el relevo, el sistema generará
+                          automáticamente tu cierre final a tu nombre para que ningún cobro quede huérfano.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center gap-3">
+                    <span className="text-2xl">✅</span>
+                    <div>
+                      <h4 className="font-bold text-emerald-900 text-sm">
+                        Caja al día (Sin cobros pendientes)
+                      </h4>
+                      <p className="text-xs text-emerald-700">
+                        Todos tus cobros ya fueron cerrados en cortes anteriores. Solo se entregará la base de efectivo.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Resumen total de la jornada del cajero saliente */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Resumen de tu Jornada Completa de Hoy
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white p-2 rounded-lg border">
+                      <span className="text-[10px] text-gray-400 block font-bold">CIERRES PREVIOS</span>
+                      <span className="text-sm font-bold text-gray-700">
+                        ${Number(handoverStatus.pastClosingsSummary.total).toLocaleString('es-CO')}
+                      </span>
+                      <span className="text-[10px] text-gray-400 block">
+                        ({handoverStatus.pastClosingsSummary.count} corte/s)
+                      </span>
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border">
+                      <span className="text-[10px] text-gray-400 block font-bold">COBROS EN RELEVO</span>
+                      <span className="text-sm font-bold text-amber-700">
+                        ${Number(handoverStatus.pendingMovements.total).toLocaleString('es-CO')}
+                      </span>
+                      <span className="text-[10px] text-gray-400 block">
+                        ({handoverStatus.pendingMovements.ticketsCount + handoverStatus.pendingMovements.subscriptionsCount} movs)
+                      </span>
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-blue-200">
+                      <span className="text-[10px] text-blue-600 block font-bold">TOTAL OPERADO HOY</span>
+                      <span className="text-sm font-extrabold text-blue-900">
+                        ${Number(handoverStatus.accumulatedFullShiftTotal).toLocaleString('es-CO')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Conteo de Efectivo Físico en la Gaveta */}
+                <div className="border border-gray-200 p-4 rounded-xl space-y-3">
+                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Conteo Físico de Efectivo en Gaveta
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                        Base de Caja que recibe el nuevo cajero ($)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        required
+                        value={handoverForm.baseAmount}
+                        onChange={(e) =>
+                          setHandoverForm({ ...handoverForm, baseAmount: e.target.value })
+                        }
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 font-bold"
+                      />
+                      <span className="text-[11px] text-gray-400">
+                        Fondo en sencillo/monedas para vueltos.
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                        Total Efectivo Físico contado en gaveta ($)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        required
+                        value={handoverForm.physicalCashDelivered}
+                        onChange={(e) =>
+                          setHandoverForm({
+                            ...handoverForm,
+                            physicalCashDelivered: e.target.value,
+                          })
+                        }
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 font-bold text-indigo-900"
+                      />
+                      <span className="text-[11px] text-gray-400">
+                        Base + dinero de cobros que queda físicamente.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Diferencia en vivo */}
+                  <div
+                    className={`p-3 rounded-lg text-xs font-bold flex justify-between items-center ${
+                      handoverDiff === 0
+                        ? 'bg-green-50 text-green-800 border border-green-200'
+                        : handoverDiff > 0
+                        ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                        : 'bg-red-50 text-red-800 border border-red-200'
+                    }`}
+                  >
+                    <span>
+                      Dinero esperado: ${expectedPhysical.toLocaleString('es-CO')} (Base: $
+                      {Number(handoverForm.baseAmount || 0).toLocaleString('es-CO')} + Relevo: $
+                      {pendingToClose.toLocaleString('es-CO')})
+                    </span>
+                    <span>
+                      {handoverDiff === 0
+                        ? '✓ Cuadrado Exacto ($0)'
+                        : handoverDiff > 0
+                        ? `+ $${handoverDiff.toLocaleString('es-CO')} (Sobrante)`
+                        : `- $${Math.abs(handoverDiff).toLocaleString('es-CO')} (Faltante)`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4. Credenciales de Validación Cruzada (Firma Cajero Entrante y Saliente) */}
+                <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-xl space-y-3">
+                  <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider">
+                    Validación y Firma de Relevo (Ambos Cajeros)
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Usuario del Cajero Entrante (Reemplazo) *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej: cajero2"
+                        value={handoverForm.incomingUsername}
+                        onChange={(e) =>
+                          setHandoverForm({
+                            ...handoverForm,
+                            incomingUsername: e.target.value,
+                          })
+                        }
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Contraseña del Cajero Entrante *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="Contraseña de quien recibe"
+                        value={handoverForm.incomingPassword}
+                        onChange={(e) =>
+                          setHandoverForm({
+                            ...handoverForm,
+                            incomingPassword: e.target.value,
+                          })
+                        }
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Contraseña del Cajero Saliente ({user?.username}) (Opcional por seguridad)
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Tu contraseña para firmar la entrega"
+                      value={handoverForm.outgoingPassword}
+                      onChange={(e) =>
+                        setHandoverForm({
+                          ...handoverForm,
+                          outgoingPassword: e.target.value,
+                        })
+                      }
+                      className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Observaciones / Novedades del Turno (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Se entrega gaveta cuadrada con 3 rollos de papel y $100.000 de base"
+                      value={handoverForm.notes}
+                      onChange={(e) =>
+                        setHandoverForm({ ...handoverForm, notes: e.target.value })
+                      }
+                      className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Botones de acción */}
+                <div className="flex gap-3 justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setHandoverModalOpen(false)}
+                    className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-sm border border-gray-300 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingHandover}
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-sm shadow-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {submittingHandover ? 'Procesando Relevo...' : '🤝 Confirmar Entrega y Relevar Turno'}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: COMPROBANTE OFICIAL DE ENTREGA DE TURNO (IMPRIMIBLE)               */}
+      {/* ========================================================================= */}
+      {handoverReceiptModalOpen && completedHandover && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full animate-in fade-in zoom-in duration-200 text-gray-800">
+            <div className="text-center border-b pb-4 mb-4">
+              <span className="text-4xl block mb-2">🤝</span>
+              <h3 className="text-xl font-extrabold text-gray-900 uppercase">
+                Acta de Entrega de Turno #{completedHandover.id}
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                {new Date(completedHandover.handoverAt).toLocaleString('es-CO')}
+              </p>
+            </div>
+
+            <div className="space-y-2.5 text-sm">
+              <div className="flex justify-between border-b pb-1.5">
+                <span className="text-gray-500">Cajero Saliente:</span>
+                <span className="font-bold text-gray-800">
+                  {completedHandover.outgoingCashierUsername}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5">
+                <span className="text-gray-500">Cajero Entrante (Activo):</span>
+                <span className="font-bold text-blue-700">
+                  {completedHandover.incomingCashierUsername}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5">
+                <span className="text-gray-500">Base entregada:</span>
+                <span className="font-bold">
+                  ${Number(completedHandover.baseAmount).toLocaleString('es-CO')}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5">
+                <span className="text-gray-500">Cobros cerrados en relevo:</span>
+                <span className="font-bold text-emerald-700">
+                  ${Number(completedHandover.pendingClosedAmount).toLocaleString('es-CO')}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5">
+                <span className="text-gray-500">Total operado en el turno:</span>
+                <span className="font-bold">
+                  ${Number(completedHandover.totalShiftAmount).toLocaleString('es-CO')}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5 bg-gray-50 p-2 rounded">
+                <span className="font-bold text-gray-700">Efectivo físico entregado:</span>
+                <span className="font-extrabold text-indigo-900 text-base">
+                  ${Number(completedHandover.physicalCashDelivered).toLocaleString('es-CO')}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5">
+                <span className="text-gray-500">Diferencia:</span>
+                <span
+                  className={`font-bold ${
+                    Number(completedHandover.difference) === 0
+                      ? 'text-green-600'
+                      : Number(completedHandover.difference) > 0
+                      ? 'text-blue-600'
+                      : 'text-red-600'
+                  }`}
+                >
+                  {Number(completedHandover.difference) === 0
+                    ? 'Exacto ($0)'
+                    : `$${Number(completedHandover.difference).toLocaleString('es-CO')}`}
+                </span>
+              </div>
+
+              {completedHandover.notes && (
+                <div className="text-xs bg-gray-50 p-2 rounded text-gray-600">
+                  <strong>Observaciones:</strong> {completedHandover.notes}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t mt-4 flex gap-2">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg shadow-sm transition-colors"
+              >
+                🖨️ Imprimir Acta
+              </button>
+              <button
+                onClick={() => {
+                  setHandoverReceiptModalOpen(false);
+                  fetchData();
+                }}
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition-colors"
+              >
+                Comenzar Turno ({completedHandover.incomingCashierUsername})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for standard personal close */}
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full animate-in fade-in zoom-in duration-200">
@@ -804,7 +1421,7 @@ export default function CajaCierre() {
         </div>
       )}
 
-      {/* Detail Modal */}
+      {/* Detail Modal for any past cash closing */}
       {detailModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-3xl w-full my-8 max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
@@ -817,7 +1434,10 @@ export default function CajaCierre() {
                   Cierre de Caja por {selectedClosingDetail?.cashierUsername}
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Fecha: {selectedClosingDetail?.closedAt ? new Date(selectedClosingDetail.closedAt).toLocaleString('es-CO') : ''}
+                  Fecha:{' '}
+                  {selectedClosingDetail?.closedAt
+                    ? new Date(selectedClosingDetail.closedAt).toLocaleString('es-CO')
+                    : ''}
                 </p>
               </div>
               <button
