@@ -5,10 +5,11 @@ import { useAuth } from '../context/AuthContext';
 
 export default function CajaCierre() {
   const { user, setSessionFromHandover } = useAuth();
-  const isSupervisor = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  const userRole = String(user?.role?.code || user?.role || '').toUpperCase();
+  const isSupervisor = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
 
-  // Active sub-tab for Admin: 'history' | 'open-shifts' | 'handovers' | 'personal'
-  const [activeTab, setActiveTab] = useState(isSupervisor ? 'history' : 'personal');
+  // Active sub-tab: 'history' (default) | 'personal' | 'handovers' | 'open-shifts'
+  const [activeTab, setActiveTab] = useState('history');
 
   // Personal shift data
   const [personalData, setPersonalData] = useState({
@@ -68,31 +69,25 @@ export default function CajaCierre() {
     try {
       setLoading(true);
       const promises = [
-        axios.get('/api/cash-closings/status'),
+        axios.get('/api/cash-closings/status').catch(() => ({ data: {} })),
         axios.get('/api/cash-closings/history', {
           params: {
             cashierId: selectedCashierId || undefined,
             startDate: startDate || undefined,
             endDate: endDate || undefined,
           },
-        }),
+        }).catch(() => ({ data: [] })),
+        axios.get('/api/cash-closings/open-shifts').catch(() => ({ data: [] })),
+        axios.get('/api/users').catch(() => ({ data: [] })),
+        axios.get('/api/cash-closings/handovers-history').catch(() => ({ data: [] })),
       ];
 
-      if (isSupervisor) {
-        promises.push(axios.get('/api/cash-closings/open-shifts'));
-        promises.push(axios.get('/api/users').catch(() => ({ data: [] })));
-        promises.push(axios.get('/api/cash-closings/handovers-history').catch(() => ({ data: [] })));
-      }
-
-      const results = await Promise.all(promises);
-      setPersonalData(results[0].data || {});
-      setHistory(results[1].data || []);
-
-      if (isSupervisor) {
-        setOpenShifts(results[2]?.data || []);
-        setCashiersList(results[3]?.data || []);
-        setHandoversHistory(results[4]?.data || []);
-      }
+      const [statusRes, historyRes, openShiftsRes, usersRes, handoversRes] = await Promise.all(promises);
+      setPersonalData(statusRes.data || {});
+      setHistory(historyRes.data || []);
+      setOpenShifts(openShiftsRes.data || []);
+      setCashiersList(usersRes.data || []);
+      setHandoversHistory(handoversRes.data || []);
     } catch (error) {
       console.error(error);
       toast.error('Error cargando información de caja');
@@ -133,6 +128,51 @@ export default function CajaCierre() {
       setHistory(res.data || []);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Quick preset filters for date range
+  const setQuickDateFilter = async (type) => {
+    const today = new Date();
+    const formatDate = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    let start = '';
+    let end = formatDate(today);
+
+    if (type === 'today') {
+      start = formatDate(today);
+    } else if (type === '7days') {
+      const past = new Date();
+      past.setDate(today.getDate() - 7);
+      start = formatDate(past);
+    } else if (type === 'month') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      start = formatDate(firstDay);
+    } else if (type === 'all') {
+      start = '';
+      end = '';
+    }
+
+    setStartDate(start);
+    setEndDate(end);
+
+    try {
+      const res = await axios.get('/api/cash-closings/history', {
+        params: {
+          cashierId: selectedCashierId || undefined,
+          startDate: start || undefined,
+          endDate: end || undefined,
+        },
+      });
+      setHistory(res.data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Error al aplicar filtro de fechas');
     }
   };
 
@@ -282,60 +322,108 @@ export default function CajaCierre() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 space-y-6 relative">
-      {/* Tabs navigation for Supervisors */}
-      {isSupervisor && (
-        <div className="flex border-b border-gray-200 space-x-2 bg-white px-4 pt-3 rounded-t-xl shadow-xs overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'history'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            📋 Cierres por Usuario
-            <span className="text-xs bg-gray-100 text-gray-700 py-0.5 px-2 rounded-full">
-              {history.length}
+      {/* Tabs navigation */}
+      <div className="flex border-b border-gray-200 space-x-2 bg-white px-4 pt-3 rounded-t-xl shadow-xs overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            activeTab === 'history'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          📊 Reportes y Estadísticas de Cierres
+          <span className="text-xs bg-gray-100 text-gray-700 py-0.5 px-2 rounded-full">
+            {history.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('personal')}
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            activeTab === 'personal'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          💵 Turno Actual (Caja Operativa)
+          {hasPendingPersonalMovements && (
+            <span className="text-xs bg-emerald-100 text-emerald-800 font-bold py-0.5 px-2 rounded-full">
+              ${Number(personalData.totalCollected || 0).toLocaleString('es-CO')}
             </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('open-shifts')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'open-shifts'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            ⏳ Cajas Abiertas en Turno
-            {openShifts.length > 0 && (
-              <span className="text-xs bg-amber-100 text-amber-800 font-bold py-0.5 px-2 rounded-full">
-                {openShifts.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('handovers')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'handovers'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            🤝 Actas de Entrega de Turno
-            <span className="text-xs bg-indigo-50 text-indigo-700 font-bold py-0.5 px-2 rounded-full">
-              {handoversHistory.length}
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('handovers')}
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            activeTab === 'handovers'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          🤝 Actas de Entrega de Turno
+          <span className="text-xs bg-indigo-50 text-indigo-700 font-bold py-0.5 px-2 rounded-full">
+            {handoversHistory.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('open-shifts')}
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            activeTab === 'open-shifts'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          ⏳ Cajas Abiertas en Turno
+          {openShifts.length > 0 && (
+            <span className="text-xs bg-amber-100 text-amber-800 font-bold py-0.5 px-2 rounded-full">
+              {openShifts.length}
             </span>
-          </button>
-        </div>
-      )}
+          )}
+        </button>
+      </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: HISTORIAL DE CIERRES POR USUARIO                                   */}
+      {/* TAB 1: HISTORIAL DE CIERRES Y REPORTES (ESTADÍSTICAS)                     */}
       {/* ========================================================================= */}
-      {activeTab === 'history' && isSupervisor && (
+      {activeTab === 'history' && (
         <div className="space-y-6">
           {/* Filter Bar */}
           <div className="bg-white p-5 rounded-xl shadow-xs border border-gray-100">
+            {/* Quick preset date buttons */}
+            <div className="flex flex-wrap items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mr-1">
+                Filtros Rápidos:
+              </span>
+              <button
+                type="button"
+                onClick={() => setQuickDateFilter('today')}
+                className="px-3 py-1 text-xs font-semibold bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-700 rounded-lg transition-colors border border-gray-200"
+              >
+                📅 Hoy
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickDateFilter('7days')}
+                className="px-3 py-1 text-xs font-semibold bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-700 rounded-lg transition-colors border border-gray-200"
+              >
+                📆 Últimos 7 días
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickDateFilter('month')}
+                className="px-3 py-1 text-xs font-semibold bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-700 rounded-lg transition-colors border border-gray-200"
+              >
+                🗓️ Este Mes
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickDateFilter('all')}
+                className="px-3 py-1 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors border border-gray-200"
+              >
+                🌐 Todo el Historial
+              </button>
+            </div>
+
             <form onSubmit={handleApplyFilters} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
@@ -533,7 +621,7 @@ export default function CajaCierre() {
       {/* ========================================================================= */}
       {/* TAB 2: TURNOS ABIERTOS EN TIEMPO REAL                                     */}
       {/* ========================================================================= */}
-      {activeTab === 'open-shifts' && isSupervisor && (
+      {activeTab === 'open-shifts' && (
         <div className="space-y-6">
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -642,7 +730,7 @@ export default function CajaCierre() {
       {/* ========================================================================= */}
       {/* TAB 3: ACTAS DE ENTREGA DE TURNO (HISTORIAL DE RELEVOS)                  */}
       {/* ========================================================================= */}
-      {activeTab === 'handovers' && isSupervisor && (
+      {activeTab === 'handovers' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
             <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
@@ -733,9 +821,9 @@ export default function CajaCierre() {
       )}
 
       {/* ========================================================================= */}
-      {/* CIERRE DE CAJA OPERATIVO (Solo para Cajeros)                               */}
+      {/* TAB 4: CIERRE DE CAJA OPERATIVO (TURNO ACTUAL)                           */}
       {/* ========================================================================= */}
-      {!isSupervisor && (
+      {activeTab === 'personal' && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-xl shadow-xs border border-gray-100">
             <div className="flex justify-between items-center mb-4">
@@ -905,8 +993,8 @@ export default function CajaCierre() {
             </div>
           )}
 
-          {/* Cashier's own past history table */}
-          {!isSupervisor && (
+          {/* Cashier's recent history summary */}
+          {history.length > 0 && (
             <div className="bg-white p-6 rounded-xl shadow-xs border border-gray-100">
               <h4 className="text-lg font-bold text-gray-800 mb-4">
                 Mi Historial de Cierres de Turno
