@@ -76,18 +76,16 @@ export default function CajaCierre() {
       setLoading(true);
       const promises = [
         axios.get('/api/cash-closings/status').catch(() => ({ data: {} })),
+        axios.get('/api/cash-closings/history', {
+          params: {
+            cashierId: isSupervisor ? (selectedCashierId || undefined) : undefined,
+            startDate: isSupervisor ? (startDate || undefined) : undefined,
+            endDate: isSupervisor ? (endDate || undefined) : undefined,
+          },
+        }).catch(() => ({ data: [] })),
       ];
 
       if (isSupervisor) {
-        promises.push(
-          axios.get('/api/cash-closings/history', {
-            params: {
-              cashierId: selectedCashierId || undefined,
-              startDate: startDate || undefined,
-              endDate: endDate || undefined,
-            },
-          }).catch(() => ({ data: [] })),
-        );
         promises.push(axios.get('/api/cash-closings/open-shifts').catch(() => ({ data: [] })));
         promises.push(axios.get('/api/users').catch(() => ({ data: [] })));
         promises.push(axios.get('/api/cash-closings/handovers-history').catch(() => ({ data: [] })));
@@ -95,9 +93,9 @@ export default function CajaCierre() {
 
       const results = await Promise.all(promises);
       setPersonalData(results[0]?.data || {});
+      setHistory(results[1]?.data || []);
 
       if (isSupervisor) {
-        setHistory(results[1]?.data || []);
         setOpenShifts(results[2]?.data || []);
         setCashiersList(results[3]?.data || []);
         setHandoversHistory(results[4]?.data || []);
@@ -341,11 +339,10 @@ export default function CajaCierre() {
         <div className="flex border-b border-gray-200 space-x-2 bg-white px-4 pt-3 rounded-t-xl shadow-xs overflow-x-auto">
           <button
             onClick={() => setActiveTab('history')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'history'
+            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === 'history'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+              }`}
           >
             📊 Reportes y Estadísticas de Cierres
             <span className="text-xs bg-gray-100 text-gray-700 py-0.5 px-2 rounded-full">
@@ -354,11 +351,10 @@ export default function CajaCierre() {
           </button>
           <button
             onClick={() => setActiveTab('open-shifts')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'open-shifts'
+            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === 'open-shifts'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+              }`}
           >
             ⏳ Cajas Abiertas en Turno
             {openShifts.length > 0 && (
@@ -369,11 +365,10 @@ export default function CajaCierre() {
           </button>
           <button
             onClick={() => setActiveTab('handovers')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'handovers'
+            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === 'handovers'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+              }`}
           >
             🤝 Actas de Entrega de Turno
             <span className="text-xs bg-indigo-50 text-indigo-700 font-bold py-0.5 px-2 rounded-full">
@@ -382,11 +377,10 @@ export default function CajaCierre() {
           </button>
           <button
             onClick={() => setActiveTab('personal')}
-            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'personal'
+            className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === 'personal'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+              }`}
           >
             💵 Mi Turno de Caja
             {hasPendingPersonalMovements && (
@@ -547,8 +541,8 @@ export default function CajaCierre() {
               <p className="text-2xl font-extrabold text-slate-800 mt-1">
                 ${historyMetrics.count > 0
                   ? Math.round(
-                      historyMetrics.totalCollected / historyMetrics.count,
-                    ).toLocaleString('es-CO')
+                    historyMetrics.totalCollected / historyMetrics.count,
+                  ).toLocaleString('es-CO')
                   : '0'}
               </p>
               <p className="text-xs text-slate-500 mt-0.5">Valor medio por turno</p>
@@ -1010,6 +1004,82 @@ export default function CajaCierre() {
               </div>
             </div>
           )}
+
+          {/* Listado de cierres del cajero con modal de detalle */}
+          <div className="bg-white p-6 rounded-xl shadow-xs border border-gray-100">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h4 className="text-lg font-bold text-gray-800">
+                  Mi Historial de Cierres de Turno
+                </h4>
+                <p className="text-xs text-gray-500">
+                  Cierres de turno realizados por tu usuario en esta sede.
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-md">
+                {history.length} cierre(s)
+              </span>
+            </div>
+
+            {history.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left text-gray-600">
+                  <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-5 py-3">Fecha y Hora</th>
+                      <th className="px-5 py-3 text-center">Tickets</th>
+                      <th className="px-5 py-3 text-center">Mensualidades</th>
+                      <th className="px-5 py-3 text-right">Total Recaudado</th>
+                      <th className="px-5 py-3 text-center">Notas</th>
+                      <th className="px-5 py-3 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {history.map((c) => (
+                      <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-3.5 font-medium text-gray-900 whitespace-nowrap">
+                          {new Date(c.closedAt).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          <span className="font-bold text-gray-800">{c.totalTickets}</span>
+                          <span className="text-xs text-gray-400 block">
+                            ${Number(c.ticketsAmount || 0).toLocaleString('es-CO')}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          <span className="font-bold text-gray-800">
+                            {c.totalSubscriptions || 0}
+                          </span>
+                          <span className="text-xs text-gray-400 block">
+                            ${Number(c.subscriptionsAmount || 0).toLocaleString('es-CO')}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-extrabold text-blue-700 text-base whitespace-nowrap">
+                          ${Number(c.totalCollected || 0).toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-5 py-3.5 text-center text-xs text-gray-500 max-w-[180px] truncate">
+                          {c.notes || '-'}
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          <button
+                            onClick={() => handleViewDetail(c.id)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors"
+                          >
+                            🔍 Detalle
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <span className="text-3xl block mb-2">📋</span>
+                No tienes cierres de turno registrados todavía.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1164,13 +1234,12 @@ export default function CajaCierre() {
 
                   {/* Diferencia en vivo */}
                   <div
-                    className={`p-3 rounded-lg text-xs font-bold flex justify-between items-center ${
-                      handoverDiff === 0
+                    className={`p-3 rounded-lg text-xs font-bold flex justify-between items-center ${handoverDiff === 0
                         ? 'bg-green-50 text-green-800 border border-green-200'
                         : handoverDiff > 0
-                        ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                        : 'bg-red-50 text-red-800 border border-red-200'
-                    }`}
+                          ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                          : 'bg-red-50 text-red-800 border border-red-200'
+                      }`}
                   >
                     <span>
                       Dinero esperado: ${expectedPhysical.toLocaleString('es-CO')} (Base: $
@@ -1181,8 +1250,8 @@ export default function CajaCierre() {
                       {handoverDiff === 0
                         ? '✓ Cuadrado Exacto ($0)'
                         : handoverDiff > 0
-                        ? `+ $${handoverDiff.toLocaleString('es-CO')} (Sobrante)`
-                        : `- $${Math.abs(handoverDiff).toLocaleString('es-CO')} (Faltante)`}
+                          ? `+ $${handoverDiff.toLocaleString('es-CO')} (Sobrante)`
+                          : `- $${Math.abs(handoverDiff).toLocaleString('es-CO')} (Faltante)`}
                     </span>
                   </div>
                 </div>
@@ -1346,13 +1415,12 @@ export default function CajaCierre() {
               <div className="flex justify-between border-b pb-1.5">
                 <span className="text-gray-500">Diferencia:</span>
                 <span
-                  className={`font-bold ${
-                    Number(completedHandover.difference) === 0
+                  className={`font-bold ${Number(completedHandover.difference) === 0
                       ? 'text-green-600'
                       : Number(completedHandover.difference) > 0
-                      ? 'text-blue-600'
-                      : 'text-red-600'
-                  }`}
+                        ? 'text-blue-600'
+                        : 'text-red-600'
+                    }`}
                 >
                   {Number(completedHandover.difference) === 0
                     ? 'Exacto ($0)'
@@ -1542,7 +1610,7 @@ export default function CajaCierre() {
                     Mensualidades Consolidadas ({selectedClosingDetail.subscriptionPayments?.length || 0})
                   </h4>
                   {selectedClosingDetail.subscriptionPayments &&
-                  selectedClosingDetail.subscriptionPayments.length > 0 ? (
+                    selectedClosingDetail.subscriptionPayments.length > 0 ? (
                     <div className="border rounded-lg overflow-hidden">
                       <table className="w-full text-xs text-left text-gray-600">
                         <thead className="bg-gray-50 border-b text-gray-700 font-bold uppercase">
