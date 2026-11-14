@@ -282,41 +282,6 @@ export default function CajaCierre() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 space-y-6 relative">
-      {/* Header with Title and Mode indicator */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white p-5 rounded-xl shadow-xs border border-gray-100">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">💵</span>
-            <h2 className="text-2xl font-bold text-gray-800">
-              {isSupervisor ? 'Supervisión y Cierre de Caja' : 'Cierre de Caja Operativo'}
-            </h2>
-          </div>
-          <p className="text-sm text-gray-500 mt-1">
-            {isSupervisor
-              ? 'Auditoría integral de turnos, actas de entrega y cierres de caja por cajero en la sede.'
-              : 'Gestión de tu turno actual, entrega de puesto a relevo y consolidación de cobros.'}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-          {!isSupervisor && (
-            <button
-              onClick={openHandoverModal}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm rounded-xl shadow-md transform active:scale-95 transition-all"
-            >
-              🤝 Entrega y Relevo de Turno
-            </button>
-          )}
-
-          {isSupervisor && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-              Admin de Sede
-            </span>
-          )}
-        </div>
-      </div>
-
       {/* Tabs navigation for Supervisors */}
       {isSupervisor && (
         <div className="flex border-b border-gray-200 space-x-2 bg-white px-4 pt-3 rounded-t-xl shadow-xs overflow-x-auto">
