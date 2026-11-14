@@ -73,9 +73,13 @@ export default function Dashboard() {
           });
         }
       } else if (perm.moduleCode === 'CASH_CLOSING') {
+        const userRole = String(
+          user?.role?.code || user?.role || user?.roleCode || ''
+        ).trim().toUpperCase();
+        const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
         items.push({
           ...perm,
-          moduleName: 'Caja y Cierres',
+          moduleName: isAdmin ? 'Caja y Cierres' : 'Cierre de Caja',
           matchRoutes: [perm.route],
         });
       } else {
