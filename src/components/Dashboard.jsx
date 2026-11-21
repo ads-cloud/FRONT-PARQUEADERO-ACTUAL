@@ -44,7 +44,10 @@ export default function Dashboard() {
   const visiblePermissions = useMemo(
     () =>
       (user?.permissions || []).filter(
-        (p) => p.canView && (!isSuperAdmin || p.moduleCode !== 'DASHBOARD'),
+        (p) =>
+          p.canView &&
+          (!isSuperAdmin ||
+            (p.moduleCode !== 'DASHBOARD' && p.moduleCode !== 'CASH_CLOSING')),
       ),
     [user?.permissions, isSuperAdmin],
   );
@@ -184,11 +187,10 @@ export default function Dashboard() {
                 <Link
                   key={item.moduleCode}
                   to={item.route}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold whitespace-nowrap transition-all ${
-                    active
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold whitespace-nowrap transition-all ${active
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <span className="text-base leading-none">{item.icon || '📦'}</span>
                   <span>{item.moduleName}</span>
@@ -253,11 +255,10 @@ export default function Dashboard() {
                     key={item.moduleCode}
                     to={item.route}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${
-                      active
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${active
                         ? 'bg-blue-600 text-white'
                         : 'bg-slate-800/70 text-slate-300 hover:text-white'
-                    }`}
+                      }`}
                   >
                     <span>{item.icon || '📦'}</span>
                     <span>{item.moduleName}</span>

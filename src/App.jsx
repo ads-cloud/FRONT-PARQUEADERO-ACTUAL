@@ -79,6 +79,18 @@ const AdminPanelRoute = () => {
   return <AdminPanel />;
 };
 
+const CashClosingRoute = () => {
+  const { user } = useAuth();
+  if (user?.role === 'SUPER_ADMIN') {
+    return <Navigate to="/dashboard/admin-parking" replace />;
+  }
+  return (
+    <ModuleRoute moduleCode="CASH_CLOSING">
+      <CajaCierre />
+    </ModuleRoute>
+  );
+};
+
 function AppRoutes() {
   return (
     <Routes>
@@ -136,11 +148,7 @@ function AppRoutes() {
         />
         <Route
           path="caja"
-          element={
-            <ModuleRoute moduleCode="CASH_CLOSING">
-              <CajaCierre />
-            </ModuleRoute>
-          }
+          element={<CashClosingRoute />}
         />
         <Route
           path="reportes"
